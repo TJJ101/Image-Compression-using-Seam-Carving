@@ -9,6 +9,23 @@
 - Don't commit large images. Put small sample inputs in `data/input/`; `data/output/` is git-ignored.
 - The project quiz is based on the submitted code: make sure you can explain everything you merge.
 
+## Building and running
+
+- **Linux / WSL:** `make` builds, `make test` runs the tests, `make run ARGS="..."` runs the CLI and
+  `make gui` opens the window. See the README for the prerequisites and all commands.
+- **Windows:** `build.bat` builds the GUI-only app as a Visual Studio 2026 project; `build.bat open` opens the solution.
+- Use a separate clone of the repo for each OS (don't build the same folder from both Windows and WSL).
+- CI builds with the CMake presets directly (it does not use `make` or `build.bat`).
+
+## Adding code
+
+- The algorithms live in the `seamcarve_core` library and must not depend on the CLI or GUI code. The window
+  (`gui.cpp`) and the CLI (`cli.cpp`, `main.cpp`) only call into the library.
+- **Every new `.cpp` file must be added to `CMakeLists.txt`** (algorithm code to `seamcarve_core`, window/CLI code to
+  `seamcarve`). The Visual Studio solution is generated, so don't change project settings in Visual Studio itself.
+- New dependencies go in `vcpkg.json` (and the matching `find_package` in `CMakeLists.txt`).
+- Tests go in `tests/CMakeLists.txt`. They run on Linux and in CI, but not in the Windows GUI-only build.
+
 ## Coding conventions
 
 | What | Convention | Example |

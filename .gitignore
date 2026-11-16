@@ -7,6 +7,7 @@ compile_commands.json
 
 # vcpkg (repo-local copy cloned by the Makefile)
 /vcpkg/
+/vcpkg-win/
 /vcpkg_installed/
 
 # IDEs
@@ -19,6 +20,9 @@ compile_commands.json
 # Generated images (keep data/input; outputs are reproducible)
 /data/output/*
 !/data/output/.gitkeep
+
+# Dear ImGui window layout (written to the working directory when the GUI runs)
+imgui.ini
 
 # OS
 .DS_Store

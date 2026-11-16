@@ -6,6 +6,11 @@
       "name": "opencv4",
       "default-features": false,
       "features": ["jpeg", "png"]
-    }
+    },
+    {
+      "name": "imgui",
+      "features": ["glfw-binding", "opengl3-binding", "docking-experimental"]
+    },
+    "glfw3"
   ]
 }

@@ -6,6 +6,8 @@
 ## How was it tested?
 
 ## Checklist
-- [ ] Builds locally (`cmake --build`) and `ctest` passes
+- [ ] Builds locally (`make test` on Linux/WSL, or `build.bat` on Windows) and the tests pass
+- [ ] New `.cpp` files are added to `CMakeLists.txt`
+- [ ] Follows the coding conventions in `CONTRIBUTING.md`
 - [ ] No OpenCV content-aware resize functions used
 - [ ] AI usage (if any) logged in `docs/ai-usage.md`

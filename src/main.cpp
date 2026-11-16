@@ -6,7 +6,17 @@
 
 #include "seamcarve/cli.hpp"
 #include "seamcarve/seam_carver.hpp"
+#ifdef SEAMCARVE_WITH_GUI
+#include "seamcarve/gui.hpp"
+#endif
 
+#ifdef SEAMCARVE_GUI_ONLY
+// GUI-only build (Windows app): there is no command-line mode. An image path given as the first
+// argument (e.g. dropped onto the exe) is loaded at startup.
+int main(int argc, char** argv) {
+    return seamcarve::RunGui(argc > 1 ? argv[1] : "");
+}
+#else
 int main(int argc, char** argv) {
     using namespace seamcarve;
 
@@ -20,6 +30,14 @@ int main(int argc, char** argv) {
     if (opts.help) {
         std::cout << Usage();
         return 0;
+    }
+    if (opts.gui) {
+#ifdef SEAMCARVE_WITH_GUI
+        return RunGui(opts.input);
+#else
+        std::cerr << "error: this build has no GUI (configure with -DSEAMCARVE_BUILD_GUI=ON)\n";
+        return 2;
+#endif
     }
 
     try {
@@ -53,3 +71,4 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
+#endif  // SEAMCARVE_GUI_ONLY

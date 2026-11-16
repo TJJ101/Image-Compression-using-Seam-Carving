@@ -26,6 +26,7 @@ namespace seamcarve {
         return
             "Usage: seamcarve --input <file> --algo <dp|greedy|graphcut> "
             "[--width <px>] [--height <px>] [--output <file>] [--verbose]\n"
+            "       seamcarve [--gui] [--input <file>]   (no arguments also opens the GUI)\n"
             "\n"
             "Options:\n"
             "  -i, --input <file>    Input image (required)\n"
@@ -34,6 +35,7 @@ namespace seamcarve {
             "  -H, --height <px>     Target height (default: unchanged, must be <= original)\n"
             "  -o, --output <file>   Output image (default: <input>_<algo>.<ext>)\n"
             "  -v, --verbose         Print progress and timing\n"
+            "  -g, --gui             Open the interactive window (default when no arguments are given)\n"
             "  -h, --help            Show this message\n";
     }
 
@@ -47,6 +49,11 @@ namespace seamcarve {
 
     CliOptions ParseArgs(const std::vector<std::string>& args) {
         CliOptions opts{};
+        if (args.empty()) {
+            opts.gui = true;
+            return opts;
+        }
+
         for (std::size_t i{}; i < args.size(); ++i) {
             const std::string& arg{ args[i] };
             auto value = [&]() -> const std::string& {
@@ -69,10 +76,14 @@ namespace seamcarve {
                 opts.height = ParsePositiveInt(arg, value());
             } else if (arg == "-v" || arg == "--verbose") {
                 opts.verbose = true;
+            } else if (arg == "-g" || arg == "--gui") {
+                opts.gui = true;
             } else {
                 throw std::invalid_argument("unknown argument '" + arg + "'");
             }
         }
+
+        if (opts.gui) return opts;
 
         if (opts.input.empty()) throw std::invalid_argument("--input is required");
         if (!opts.width && !opts.height) {
