@@ -5,7 +5,8 @@
 CMakeUserPresets.json
 compile_commands.json
 
-# vcpkg
+# vcpkg (repo-local copy cloned by the Makefile)
+/vcpkg/
 /vcpkg_installed/
 
 # IDEs

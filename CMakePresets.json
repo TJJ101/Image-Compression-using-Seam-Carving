@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (OpenCV found on system, e.g. apt/brew/OPENCV_DIR)",
+      "binaryDir": "${sourceDir}/build/default"
+    },
+    {
+      "name": "vcpkg",
+      "displayName": "vcpkg manifest mode (recommended on Windows)",
+      "binaryDir": "${sourceDir}/build/cmake",
+      "cacheVariables": { "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build" },
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default", "configuration": "Release" },
+    { "name": "vcpkg", "configurePreset": "vcpkg", "configuration": "Release" }
+  ],
+  "testPresets": [
+    { "name": "default", "configurePreset": "default", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "vcpkg", "configurePreset": "vcpkg", "configuration": "Release", "output": { "outputOnFailure": true } }
+  ]
+}
