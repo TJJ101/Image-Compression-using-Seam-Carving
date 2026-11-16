@@ -9,6 +9,7 @@
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h>  // DockBuilder (default window layout)
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <opencv2/imgcodecs.hpp>
@@ -31,6 +32,7 @@ namespace seamcarve {
             int targetHeight{};
             std::string status;
             bool statusIsError{ false };
+            bool layoutChecked{ false };  // the default dock layout is created at most once
         };
 
         /**
@@ -144,6 +146,34 @@ namespace seamcarve {
                 ImGui::End();
             }
         }
+
+        /**
+        * @brief Creates the full-window dock space; on the first run (no saved layout) docks the
+        * windows as Controls | Original | Result. Later runs restore the layout saved in imgui.ini.
+        * @param[in,out] state	- UI state (remembers that the layout was already checked).
+        */
+        void DrawDockspace(GuiState& state) {
+            const ImGuiID dockspaceId{ ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport()) };
+            if (state.layoutChecked) return;
+            state.layoutChecked = true;
+
+            const ImGuiDockNode* const node{ ImGui::DockBuilderGetNode(dockspaceId) };
+            if (node && !node->IsEmpty()) return;  // a layout was loaded from imgui.ini
+
+            ImGui::DockBuilderRemoveNode(dockspaceId);
+            ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+            ImGuiID rightId{};
+            const ImGuiID controlsId{ ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, 0.25f, nullptr, &rightId) };
+            ImGuiID resultId{};
+            const ImGuiID originalId{ ImGui::DockBuilderSplitNode(rightId, ImGuiDir_Left, 0.5f, nullptr, &resultId) };
+
+            ImGui::DockBuilderDockWindow("Controls", controlsId);
+            ImGui::DockBuilderDockWindow("Original", originalId);
+            ImGui::DockBuilderDockWindow("Result", resultId);
+            ImGui::DockBuilderFinish(dockspaceId);
+        }
     }  // namespace
 
     int RunGui(const std::string& imagePath) {
@@ -164,6 +194,8 @@ namespace seamcarve {
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        ImGuiIO& io{ ImGui::GetIO() };
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         ImGui::StyleColorsDark();
         ImGui_ImplGlfw_InitForOpenGL(window, true);
         ImGui_ImplOpenGL3_Init(glslVersion);
@@ -181,6 +213,7 @@ namespace seamcarve {
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
+            DrawDockspace(state);
             DrawControls(state);
             DrawImages(state);
 

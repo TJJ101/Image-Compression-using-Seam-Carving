@@ -137,7 +137,9 @@ make run ARGS="-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.pn
 
 **GUI (Linux / WSL: `make gui`; Windows: `build.bat run` or double-click `build\seamcarve.exe`):**
 type an image path and press Load, pick an algorithm, set the target width and height with the sliders and
-press Carve. The original and the result are shown in their own windows.
+press Carve. The original and the result are shown in their own windows. The windows are dockable: drag one by its
+title bar onto another to dock it (or to tab it), and drag the dividers to resize. The layout is saved to
+`imgui.ini` in the folder you launched from (git-ignored).
 
 ## Project structure
 

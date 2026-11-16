@@ -21,6 +21,9 @@ compile_commands.json
 /data/output/*
 !/data/output/.gitkeep
 
+# Dear ImGui window layout (written to the working directory when the GUI runs)
+imgui.ini
+
 # OS
 .DS_Store
 Thumbs.db
