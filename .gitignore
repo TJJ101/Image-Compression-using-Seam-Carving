@@ -1,0 +1,24 @@
+# Build output
+/build/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# vcpkg
+/vcpkg_installed/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Generated images (keep data/input; outputs are reproducible)
+/data/output/*
+!/data/output/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
