@@ -5,19 +5,34 @@
     {
       "name": "default",
       "displayName": "Default (OpenCV found on system, e.g. apt/brew/OPENCV_DIR)",
-      "binaryDir": "${sourceDir}/build/default"
+      "binaryDir": "${sourceDir}/build/default",
+      "cacheVariables": { "SEAMCARVE_BUILD_GUI": "OFF" }
     },
     {
       "name": "vcpkg",
-      "displayName": "vcpkg manifest mode (recommended on Windows)",
+      "displayName": "vcpkg manifest mode, CLI + GUI (used by the Makefile and the Windows CI job)",
       "binaryDir": "${sourceDir}/build/cmake",
       "cacheVariables": { "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build" },
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "windows-gui",
+      "displayName": "Windows GUI-only app as a Visual Studio 2026 project, DLLs next to the exe (used by build.bat)",
+      "inherits": "vcpkg",
+      "generator": "Visual Studio 18 2026",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "binaryDir": "${sourceDir}/build/cmake-windows",
+      "cacheVariables": {
+        "SEAMCARVE_GUI_ONLY": "ON",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE": "${sourceDir}/build"
+      }
     }
   ],
   "buildPresets": [
     { "name": "default", "configurePreset": "default", "configuration": "Release" },
-    { "name": "vcpkg", "configurePreset": "vcpkg", "configuration": "Release" }
+    { "name": "vcpkg", "configurePreset": "vcpkg", "configuration": "Release" },
+    { "name": "windows-gui", "configurePreset": "windows-gui", "configuration": "Release" }
   ],
   "testPresets": [
     { "name": "default", "configurePreset": "default", "configuration": "Release", "output": { "outputOnFailure": true } },

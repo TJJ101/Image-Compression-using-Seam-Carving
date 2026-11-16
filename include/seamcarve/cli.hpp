@@ -13,11 +13,13 @@ namespace seamcarve {
         std::optional<int> height;  // target height in pixels (default: unchanged)
         bool verbose{ false };
         bool help{ false };
+        bool gui{ false };  // open the interactive window instead of running the CLI
     };
 
     /**
     * @brief Parses the command-line arguments into a CliOptions struct.
-    * Returns early with help set if -h/--help is present.
+    * Returns early with help set if -h/--help is present. With no arguments at all (e.g. when the
+    * program is double-clicked) or with -g/--gui, gui is set and only an optional --input is used.
     * @param[in] args	- Arguments, excluding the program name.
     * @return The parsed options.
     * @throws std::invalid_argument With a user-readable message on bad arguments.

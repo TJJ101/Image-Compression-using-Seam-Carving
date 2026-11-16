@@ -1,15 +1,22 @@
 # Convenience wrapper around CMake + vcpkg (Linux / WSL). Run `make help` from the repo root.
 #
-# `make` clones and bootstraps vcpkg into ./vcpkg (once), lets vcpkg build OpenCV from
-# vcpkg.json (once, slow), configures CMake (once) and compiles the sources. Later runs only
-# rebuild when a source file changed.
+# Everything is one program, build/seamcarve: `make run ARGS="..."` runs it as a command-line
+# tool, `make gui` (or running it with no arguments) opens the ImGui window.
+#
+# `make` clones and bootstraps vcpkg into ./vcpkg (once), lets vcpkg build OpenCV, ImGui and GLFW
+# from vcpkg.json (once, slow), configures CMake (once) and compiles the sources. Later runs
+# only rebuild when a source file changed.
 #
 # vcpkg itself needs a few system tools; if it complains, install them with:
-#   sudo apt install build-essential curl zip unzip tar pkg-config nasm
+#   sudo apt install build-essential curl zip unzip tar pkg-config nasm cmake \
+#       autoconf autoconf-archive automake libtool \
+#       libxmu-dev libxi-dev libgl-dev libxinerama-dev libxcursor-dev xorg-dev libglu1-mesa-dev
 PRESET       := vcpkg
 BUILD_DIR    := build/cmake
 EXE          := build/seamcarve
-CACHE        := $(BUILD_DIR)/CMakeCache.txt
+# The generated Makefile only exists after a configure that succeeded (CMakeCache.txt can be left
+# behind by a failed one).
+CACHE        := $(BUILD_DIR)/Makefile
 SOURCES      := $(wildcard src/*.cpp include/seamcarve/*.hpp) CMakeLists.txt
 
 # vcpkg location, relative to the repo root. Set VCPKG_DIR (or the VCPKG_ROOT environment
@@ -21,21 +28,23 @@ endif
 export VCPKG_ROOT := $(abspath $(VCPKG_DIR))
 
 .DEFAULT_GOAL := build
-.PHONY: help build test run usage clean rebuild
+.PHONY: help build test run usage gui clean rebuild
 
 help: ## Show this help
 	@echo "Usage: make [target]"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-10s %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Example: make run ARGS=\"-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.png\""
+	@echo "CLI example: make run ARGS=\"-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.png\""
+	@echo "GUI example: make gui ARGS=\"-i data/input/castle.png\""
 
 # Fetch and bootstrap vcpkg (only if it is not there yet).
 $(VCPKG_DIR)/vcpkg:
 	test -d $(VCPKG_DIR) || git clone --depth 1 https://github.com/microsoft/vcpkg.git $(VCPKG_DIR)
 	$(VCPKG_DIR)/bootstrap-vcpkg.sh -disableMetrics
 
-# Configure CMake; in vcpkg manifest mode this also installs OpenCV (only if not configured yet).
+# Configure CMake; in vcpkg manifest mode this also installs OpenCV, ImGui and GLFW (only if not
+# configured yet).
 $(CACHE): $(VCPKG_DIR)/vcpkg
 	cmake --preset $(PRESET)
 
@@ -48,11 +57,14 @@ build: $(EXE) ## Install deps via vcpkg and build the executable (default)
 test: $(EXE) ## Build, then run the CTest tests
 	ctest --preset $(PRESET)
 
-run: $(EXE) ## Run the CLI: make run ARGS="-i in.png -a dp -w 400"
+run: $(EXE) ## Run the CLI: make run ARGS="-i in.png -a dp -w 400" (no ARGS opens the GUI)
 	$(EXE) $(ARGS)
 
 usage: $(EXE) ## Print the seamcarve command-line usage
 	$(EXE) --help
+
+gui: $(EXE) ## Open the ImGui window: make gui ARGS="-i data/input/castle.png" (image optional)
+	$(EXE) --gui $(ARGS)
 
 clean: ## Delete everything generated: build/ and the repo-local vcpkg (with its installed libs)
 	rm -rf build
