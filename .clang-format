@@ -5,3 +5,6 @@ AccessModifierOffset: -4
 AllowShortFunctionsOnASingleLine: Inline
 DerivePointerAlignment: false
 PointerAlignment: Left
+NamespaceIndentation: All
+Cpp11BracedListStyle: false
+FixNamespaceComments: true
