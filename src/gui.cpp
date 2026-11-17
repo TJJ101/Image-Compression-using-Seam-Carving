@@ -1,11 +1,13 @@
 // Interactive front end (Dear ImGui + GLFW + OpenGL), compiled into the main executable.
-// This is only the window/UI scaffolding: load an image, pick an algorithm, choose a target size
-// and press "Carve". The seam carving itself lives in the core library; until it is implemented
-// the status line shows its error.
+// This is only the window/UI scaffolding: load an image (type its path or drag and drop it onto the
+// window), pick an algorithm, choose a target size and press "Carve". The seam carving itself lives
+// in the core library; until it is implemented the status line shows its error.
 #include "seamcarve/gui.hpp"
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <string>
+#include <utility>
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -33,6 +35,8 @@ namespace seamcarve {
             std::string status;
             bool statusIsError{ false };
             bool layoutChecked{ false };  // the default dock layout is created at most once
+            std::string droppedPath;      // file dropped onto the window, loaded at the start of the next frame
+            int droppedCount{};           // how many files were in that drop (only the first is used)
         };
 
         /**
@@ -83,6 +87,47 @@ namespace seamcarve {
         }
 
         /**
+        * @brief GLFW callback for files dragged and dropped onto the window. It only remembers the
+        * first path; the image is loaded later by LoadDroppedImage() in the main loop, so that all
+        * loading goes through the same code as the "Load" button.
+        * @param[in] window	- Window the files were dropped on (its user pointer is the GuiState).
+        * @param[in] count	- Number of dropped files.
+        * @param[in] paths	- UTF-8 paths of the dropped files.
+        */
+        void DropCallback(GLFWwindow* window, int count, const char** paths) {
+            GuiState* const state{ static_cast<GuiState*>(glfwGetWindowUserPointer(window)) };
+            if (!state || count < 1 || !paths || !paths[0]) return;
+
+            state->droppedPath = paths[0];
+            state->droppedCount = count;
+        }
+
+        /**
+        * @brief Loads the file remembered by DropCallback() (if any) and puts its path in the path box.
+        * @param[in,out] state	- UI state; the pending drop is cleared.
+        */
+        void LoadDroppedImage(GuiState& state) {
+            if (state.droppedPath.empty()) return;
+
+            const std::string path{ std::move(state.droppedPath) };
+            const int count{ state.droppedCount };
+            state.droppedPath.clear();
+            state.droppedCount = 0;
+
+            if (path.size() >= sizeof(state.pathBuffer)) {
+                state.status = "dropped file path is too long (max " + std::to_string(sizeof(state.pathBuffer) - 1) + " characters)";
+                state.statusIsError = true;
+                return;
+            }
+
+            path.copy(state.pathBuffer, sizeof(state.pathBuffer) - 1);
+            state.pathBuffer[path.size()] = '\0';
+            LoadImage(state);
+
+            if (count > 1 && !state.statusIsError) state.status += " (" + std::to_string(count) + " files dropped, used the first)";
+        }
+
+        /**
         * @brief Runs seam carving with the selected algorithm and target size.
         * @param[in,out] state	- UI state; the result texture and status line are updated.
         */
@@ -110,6 +155,7 @@ namespace seamcarve {
 
             ImGui::InputText("Image path", state.pathBuffer, sizeof(state.pathBuffer));
             if (ImGui::Button("Load")) LoadImage(state);
+            ImGui::TextDisabled("or drag and drop an image onto the window");
 
             if (!state.original.empty()) {
                 ImGui::Separator();
@@ -206,8 +252,14 @@ namespace seamcarve {
             LoadImage(state);
         }
 
+        // Drag and drop: the ImGui GLFW backend does not use the window user pointer or the drop
+        // callback, so both are free for us.
+        glfwSetWindowUserPointer(window, &state);
+        glfwSetDropCallback(window, DropCallback);
+
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            LoadDroppedImage(state);
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
