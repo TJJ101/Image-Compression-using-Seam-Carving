@@ -39,6 +39,7 @@ add_library(seamcarve_core STATIC
     src/seam_greedy.cpp
     src/seam_graphcut.cpp
     src/seam_carver.cpp
+	src/max_flow.cpp
 )
 target_include_directories(seamcarve_core PUBLIC include)
 target_link_libraries(seamcarve_core PUBLIC ${OpenCV_LIBS})

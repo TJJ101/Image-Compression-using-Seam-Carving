@@ -38,13 +38,14 @@ namespace seamcarve {
             */
             int AugmentingPathCount() const;
             /**
-            * @brief Returns the number of augmenting paths used in the last MaxFlow call.
-            * @return Number of augmenting paths.
+            * @brief Returns the edges leaving a given node.
+            * @param[in] node	- The node to get edges from.
+            * @return A reference to the vector of edges leaving the node.
             */
-            int AugmentingPathCount() const;
+            const std::vector<FlowEdge>& EdgesFrom(int node) const;
 
         private:
-            std::vector<std::vector<FlowEdge>> graph;                                                           //Adjacency list representation of the flow network
+            std::vector<std::vector<FlowEdge>> graph;                                                         //Adjacency list representation of the flow network
             int augmentingPaths{0};                                                                             //Number of augmenting paths used in the last MaxFlow call
     };
 } //end namespace seamcarve

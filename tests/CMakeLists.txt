@@ -7,3 +7,7 @@ set_tests_properties(cli_missing_input PROPERTIES WILL_FAIL TRUE)
 
 add_test(NAME cli_bad_algo COMMAND seamcarve -i x.png -a nope -w 10)
 set_tests_properties(cli_bad_algo PROPERTIES WILL_FAIL TRUE)
+
+add_executable(test_max_flow test_max_flow.cpp)
+target_link_libraries(test_max_flow PRIVATE seamcarve_core)
+add_test(NAME max_flow COMMAND test_max_flow)
