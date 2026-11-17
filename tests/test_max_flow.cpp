@@ -44,8 +44,24 @@ void TestFlowGraph(){
     Check("1->2 has INF capacity", g.EdgesFrom(1)[1].capacity == FlowGraph::INF);
 }
 
+void TestEdmondsKarp() {
+    // Two paths s->a->t and s->b->t, each can carry 1. Answer: 2.
+    FlowGraph g{ 4 };   // s=0, a=1, b=2, t=3
+    g.AddEdge(0, 1, 1);
+    g.AddEdge(0, 2, 1);
+    g.AddEdge(1, 3, 1);
+    g.AddEdge(2, 3, 1);
+    Check("max flow is 2", g.MaxFlow(0, 3) == 2.0);
+    Check("used 2 augmenting paths", g.AugmentingPathCount() == 2);
+
+    std::vector<bool> side{ g.MinCut(0) };
+    Check("source is on source side", side[0]);
+    Check("sink is NOT on source side", !side[3]);
+}
+
 int main(){
     TestFlowGraph();
-    std::cout << (failures == 0 ? "All tests passed.\n" : "Some tests FAILED.\n");
+    TestEdmondsKarp();
+    std::cout << "Total failures: " << failures << std::endl;
     return failures == 0 ? 0 : 1;
 }
