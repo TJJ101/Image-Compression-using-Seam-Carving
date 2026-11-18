@@ -136,8 +136,15 @@ make run ARGS="-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.pn
 ```
 
 **GUI (Linux / WSL: `make gui`; Windows: `build.bat run` or double-click `build\seamcarve.exe`):**
-type an image path and press Load, pick an algorithm, set the target width and height with the sliders and
-press Carve. The original and the result are shown in their own windows. The windows are dockable: drag one by its
+type an image path and press Load (or drag and drop an image file onto the window; on Windows only, since WSL does
+not pass drops from Windows apps; in WSL you can type or paste a Windows path such as `C:\Users\me\cat.png` and it is
+opened as `/mnt/c/Users/me/cat.png`), pick an algorithm, set the target size with the Scale % / Width / Height
+sliders ("Keep aspect ratio" moves them together, Reset goes back to the original size) and press Carve. Save
+result writes the carved image next to the original as `<name>_carved_<width>x<height>.<ext>`. The original and
+the result are shown in their own windows at the same scale ("Fit images to window" scales them to fit, untick it
+for 100% with scrollbars). Messages appear in the status bar at the bottom (hover a message for the full path). The
+window uses the system UI font (Segoe UI on Windows, Ubuntu / DejaVu on Linux) and scales with the display scale
+setting. The windows are dockable: drag one by its
 title bar onto another to dock it (or to tab it), and drag the dividers to resize. The layout is saved to
 `imgui.ini` in the folder you launched from (git-ignored).
 
@@ -162,7 +169,7 @@ executable (CLI + GUI) that links it.
 ```
 include/seamcarve/   public headers (interfaces)
 src/                 energy, seam_dp, seam_greedy, seam_graphcut, seam_carver, types (algorithms);
-                     cli, gui, main (program)
+                     cli, gui, gui_theme (GUI colours/fonts/style), main (program)
 tests/               CTest tests (they drive the CLI)
 Makefile             build/run commands for Linux/WSL (wraps CMake + vcpkg)
 build.bat            build script for the Windows GUI app (Visual Studio 2026 project)

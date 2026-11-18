@@ -61,7 +61,7 @@ if(SEAMCARVE_BUILD_GUI)
     find_package(glfw3 CONFIG REQUIRED)
     find_package(OpenGL REQUIRED)
 
-    target_sources(seamcarve PRIVATE src/gui.cpp)
+    target_sources(seamcarve PRIVATE src/gui.cpp src/gui_theme.cpp)
     target_compile_definitions(seamcarve PRIVATE SEAMCARVE_WITH_GUI)
     target_link_libraries(seamcarve PRIVATE imgui::imgui glfw OpenGL::GL)
 endif()
