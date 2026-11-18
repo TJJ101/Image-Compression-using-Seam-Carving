@@ -61,8 +61,9 @@ namespace seamcarve {
         return seam;
     }
 
-    Seam FindSeamGraphCut(const cv::Mat& /*energy*/) {
-        // TODO(Task 4): build s-t graph, run max-flow (e.g. Edmonds-Karp), BFS on residual graph, read seam.
-        throw std::logic_error("FindSeamGraphCut: not implemented");
+    Seam FindSeamGraphCut(const cv::Mat& energy) {
+        SeamGraph seamGraph{ BuildSeamGraph(energy) };
+        seamGraph.graph.MaxFlow(seamGraph.source, seamGraph.sink);
+        return ReadSeamFromCut(seamGraph.graph.MinCut(seamGraph.source), energy.rows, energy.cols);
     }
 }  // namespace seamcarve

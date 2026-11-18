@@ -3,10 +3,12 @@
 #include <string>
 #include <vector>
 #include <opencv2/core.hpp>
+#include "seamcarve/seam_finders.hpp"
 #include "seamcarve/seam_graphcut.hpp"
 
 using seamcarve::BuildSeamGraph;
 using seamcarve::FlowEdge;
+using seamcarve::FindSeamGraphCut;
 using seamcarve::FlowGraph;
 using seamcarve::PixelNode;
 using seamcarve::ReadSeamFromCut;
@@ -169,6 +171,44 @@ void TestReadSeamInvalidCut() {
           ReadThrows<std::invalid_argument>(std::vector<bool>(5, true), 2, 3));
 }
 
+// Max-flow value of the seam graph, which equals the energy of the seam that is cut.
+double SeamGraphFlow(const cv::Mat& energy) {
+    SeamGraph sg{ BuildSeamGraph(energy) };
+    return sg.graph.MaxFlow(sg.source, sg.sink);
+}
+
+// Runs FindSeamGraphCut on a map with one cheapest seam and checks both the seam and the flow.
+void CheckFindSeam(const std::string& name, const cv::Mat& energy, const Seam& expected, double expectedFlow) {
+    Check(name + ": seam", FindSeamGraphCut(energy) == expected);
+    Check(name + ": max flow equals seam energy", SeamGraphFlow(energy) == expectedFlow);
+}
+
+void TestFindSeam() {
+    CheckFindSeam("cheap middle column", MakeEnergy(3, 3, { 9, 1, 9, 9, 1, 9, 9, 1, 9 }), { 1, 1, 1 }, 3);
+    CheckFindSeam("cheap first column", MakeEnergy(3, 3, { 1, 9, 9, 1, 9, 9, 1, 9, 9 }), { 0, 0, 0 }, 3);
+    CheckFindSeam("cheap last column", MakeEnergy(3, 3, { 9, 9, 1, 9, 9, 1, 9, 9, 1 }), { 2, 2, 2 }, 3);
+
+    // Cheap pixels along the diagonal: the seam moves one column every row
+    CheckFindSeam("diagonal seam", MakeEnergy(4, 4, { 1, 9, 9, 9, 9, 1, 9, 9, 9, 9, 1, 9, 9, 9, 9, 1 }),
+                  { 0, 1, 2, 3 }, 4);
+
+    // (0,0) and (1,3) are free but too far apart to be on one seam,
+    // so {3,3} (5 + 0) wins over {0,0} or {0,1} (0 + 9)
+    CheckFindSeam("seam must stay connected", MakeEnergy(2, 4, { 0, 9, 9, 5, 9, 9, 9, 0 }), { 3, 3 }, 5);
+
+    CheckFindSeam("single row", MakeEnergy(1, 3, { 5, 2, 7 }), { 1 }, 2);
+    CheckFindSeam("single column", MakeEnergy(3, 1, { 4, 5, 6 }), { 0, 0, 0 }, 15);
+    CheckFindSeam("single pixel", MakeEnergy(1, 1, { 3 }), { 0 }, 3);
+
+    bool emptyThrows{ false };
+    try {
+        FindSeamGraphCut(cv::Mat{});
+    } catch (const std::invalid_argument&) {
+        emptyThrows = true;
+    }
+    Check("FindSeamGraphCut rejects an empty energy map", emptyThrows);
+}
+
 int main() {
     TestTwoByThree();
     TestOneColumn();
@@ -176,6 +216,7 @@ int main() {
     TestInvalidInput();
     TestReadSeam();
     TestReadSeamInvalidCut();
+    TestFindSeam();
     std::cout << "Total failures: " << failures << std::endl;
     return failures == 0 ? 0 : 1;
 }
