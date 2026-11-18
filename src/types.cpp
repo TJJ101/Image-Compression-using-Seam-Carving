@@ -34,4 +34,18 @@ namespace seamcarve {
         return "unknown";
     }
 
+    DivideAndConquer ParseDivideAndConquerType(const std::string& name) {
+        if (name == "recursion") return DivideAndConquer::RECURSION;
+        if (name == "iteration") return DivideAndConquer::ITERATION;
+        throw std::invalid_argument("unknown divide-and-conquer type '" + name + "' (expected recursion or iteration)");
+    }
+
+    std::string ToString(DivideAndConquer type) {
+        switch (type) {
+            case DivideAndConquer::RECURSION: return "recursion";
+            case DivideAndConquer::ITERATION: return "iteration";
+        }
+        return "unknown";
+    }
+
 }  // namespace seamcarve

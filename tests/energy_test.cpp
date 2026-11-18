@@ -287,7 +287,10 @@ int main() {
     const std::vector<Method> methods{
         { "gradient", [](const cv::Mat& image) { return seamcarve::ComputeEnergyGradient(image); }, false },
         { "sobel", [](const cv::Mat& image) { return seamcarve::ComputeEnergySobel(image); }, true },
-        { "divide-and-conquer", [](const cv::Mat& image) { return seamcarve::ComputeEnergyDivideAndConquer(image, 8); }, false },
+        // Both divide-and-conquer functions use Sobel for their blocks, so they must match the Sobel reference exactly
+        // (base size 8 makes the small test images split, so the cuts are really tested).
+        { "divide-and-conquer (recursion)", [](const cv::Mat& image) { return seamcarve::ComputeEnergyDivideAndConquerWithRecursion(image, 8); }, true },
+        { "divide-and-conquer (iteration)", [](const cv::Mat& image) { return seamcarve::ComputeEnergyDivideAndConquerWithIteration(image, 8); }, true },
         { "default (ComputeEnergy)", [](const cv::Mat& image) { return seamcarve::ComputeEnergy(image); }, true },
     };
 

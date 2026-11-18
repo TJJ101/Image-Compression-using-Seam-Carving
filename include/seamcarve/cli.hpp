@@ -10,6 +10,8 @@ namespace seamcarve {
         std::string output;  // empty -> derived from input + algorithm
         Algorithm algorithm{ Algorithm::DYNAMIC_PROGRAMMING };
         EnergyMethod energyMethod{ EnergyMethod::SOBEL };
+        DivideAndConquer divideAndConquerType{ DivideAndConquer::RECURSION };  // only with --energy dc
+        std::optional<int> baseSize;  // divide-and-conquer block size (default: DEFAULT_BASE_SIZE); only with --energy dc
         std::optional<int> width;   // target width in pixels (default: unchanged)
         std::optional<int> height;  // target height in pixels (default: unchanged)
         bool verbose{ false };

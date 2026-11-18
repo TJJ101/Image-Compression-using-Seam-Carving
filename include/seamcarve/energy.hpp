@@ -3,7 +3,7 @@
 #include "seamcarve/types.hpp"
 
 namespace seamcarve {
-    inline constexpr int DEFAULT_BASE_SIZE{ 64 };   // Block size in pixels below which the divide-and-conquer method stops splitting.
+    inline constexpr int DEFAULT_BASE_SIZE{ 32 };   // Block size in pixels below which the divide-and-conquer method stops splitting.
 
     // Every energy function has the same contract:
     //   input : 8-bit BGR image (CV_8UC3)
@@ -16,10 +16,12 @@ namespace seamcarve {
     * @brief Computes the per-pixel energy map with the chosen method.
     * @param[in] image	- 8-bit BGR image (CV_8UC3).
     * @param[in] method	- Which approach to use. (default to Sobel)
+    * @param[in] type   - What divide & conquer method to use (only for EnergyMethod::DIVIDE_AND_CONQUER).
+    * @param[in] baseSize	- Block size where divide and conquer stops splitting (only for EnergyMethod::DIVIDE_AND_CONQUER).
     * @return Single-channel CV_64F matrix, same size as the input.
     * @throws std::invalid_argument if image is invalid or if the method is not recognised.
     */
-    cv::Mat ComputeEnergy(const cv::Mat& image, EnergyMethod method = EnergyMethod::SOBEL);
+    cv::Mat ComputeEnergy(const cv::Mat& image, EnergyMethod method = EnergyMethod::SOBEL, DivideAndConquer type = DivideAndConquer::RECURSION, int baseSize = DEFAULT_BASE_SIZE);
 
     /**
     * @brief Energy from finite differences between neighbouring pixels, |dI/dx| + |dI/dy|.
@@ -43,5 +45,9 @@ namespace seamcarve {
     * @param[in] baseSize	- Blocks no larger than this (in both directions) are computed directly.
     * @return Single-channel CV_64F matrix, same size as the input.
     */
-    cv::Mat ComputeEnergyDivideAndConquer(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
+    cv::Mat ComputeEnergyDivideAndConquer(const cv::Mat& image, DivideAndConquer type, int baseSize = DEFAULT_BASE_SIZE);
+
+    cv::Mat ComputeEnergyDivideAndConquerWithRecursion(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
+
+    cv::Mat ComputeEnergyDivideAndConquerWithIteration(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
 }  // namespace seamcarve

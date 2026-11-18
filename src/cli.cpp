@@ -1,4 +1,5 @@
 #include "seamcarve/cli.hpp"
+#include "seamcarve/energy.hpp"  // DEFAULT_BASE_SIZE
 
 #include <stdexcept>
 
@@ -25,13 +26,17 @@ namespace seamcarve {
     std::string Usage() {
         return
             "Usage: seamcarve --input <file> --algo <dp|greedy|graphcut> "
-            "[--energy <gradient|sobel|dc>] [--width <px>] [--height <px>] [--output <file>] [--verbose]\n"
+            "[--energy <gradient|sobel|dc> [--dc-type <recursion|iteration>] [--base-size <px>]] "
+            "[--width <px>] [--height <px>] [--output <file>] [--verbose]\n"
             "       seamcarve [--gui] [--input <file>]   (no arguments also opens the GUI)\n"
             "\n"
             "Options:\n"
             "  -i, --input <file>    Input image (required)\n"
             "  -a, --algo <name>     dp (default) | greedy | graphcut\n"
             "  -e, --energy <name>   gradient | sobel (default) | dc (divide and conquer)\n"
+            "  -t, --dc-type <name>  recursion (default) | iteration (only with --energy dc)\n"
+            "  -b, --base-size <px>  Block size where divide and conquer stops splitting (only with --energy dc;\n"
+            "                        default: " + std::to_string(DEFAULT_BASE_SIZE) + ", at least 3 for recursion)\n"
             "  -w, --width <px>      Target width  (default: unchanged, must be <= original)\n"
             "  -H, --height <px>     Target height (default: unchanged, must be <= original)\n"
             "  -o, --output <file>   Output image (default: <input>_<algo>.<ext>)\n"
@@ -55,6 +60,8 @@ namespace seamcarve {
             return opts;
         }
 
+        bool dcOptionGiven{ false };  // --dc-type or --base-size was used
+
         for (std::size_t i{}; i < args.size(); ++i) {
             const std::string& arg{ args[i] };
             auto value = [&]() -> const std::string& {
@@ -73,6 +80,12 @@ namespace seamcarve {
                 opts.algorithm = ParseAlgorithm(value());
             } else if (arg == "-e" || arg == "--energy") {
                 opts.energyMethod = ParseEnergyMethod(value());
+            } else if (arg == "-t" || arg == "--dc-type") {
+                opts.divideAndConquerType = ParseDivideAndConquerType(value());
+                dcOptionGiven = true;
+            } else if (arg == "-b" || arg == "--base-size") {
+                opts.baseSize = ParsePositiveInt(arg, value());
+                dcOptionGiven = true;
             } else if (arg == "-w" || arg == "--width") {
                 opts.width = ParsePositiveInt(arg, value());
             } else if (arg == "-H" || arg == "--height") {
@@ -87,6 +100,11 @@ namespace seamcarve {
         }
 
         if (opts.gui) return opts;
+
+        if (dcOptionGiven && opts.energyMethod != EnergyMethod::DIVIDE_AND_CONQUER)
+            throw std::invalid_argument("--dc-type and --base-size only apply with --energy dc");
+        if (opts.divideAndConquerType == DivideAndConquer::RECURSION && opts.baseSize && *opts.baseSize < 3)
+            throw std::invalid_argument("--base-size must be at least 3 when --dc-type is recursion");
 
         if (opts.input.empty()) throw std::invalid_argument("--input is required");
         if (!opts.width && !opts.height) {

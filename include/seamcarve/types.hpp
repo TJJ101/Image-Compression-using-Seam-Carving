@@ -20,6 +20,11 @@ namespace seamcarve {
         DIVIDE_AND_CONQUER   // split the image into blocks, compute each, merge (Question 2b)
     };
 
+    enum class DivideAndConquer {
+        RECURSION,
+        ITERATION
+    };
+
     // A seam is stored as one index per row (vertical seam, size == rows: the column
     // removed in each row) or one index per column (horizontal seam, size == cols:
     // the row removed in each column).
@@ -56,4 +61,20 @@ namespace seamcarve {
     * @return "gradient", "sobel" or "dc".
     */
     std::string ToString(EnergyMethod method);
+
+    /**
+    * @brief Converts a divide-and-conquer type name from the command line into a DivideAndConquer value.
+    * Accepted names are "recursion" and "iteration".
+    * @param[in] name	- Divide-and-conquer type name.
+    * @return The matching DivideAndConquer value.
+    * @throws std::invalid_argument If the name is not recognised.
+    */
+    DivideAndConquer ParseDivideAndConquerType(const std::string& name);
+
+    /**
+    * @brief Converts a DivideAndConquer value into its command-line name.
+    * @param[in] type	- Divide-and-conquer type value.
+    * @return "recursion" or "iteration".
+    */
+    std::string ToString(DivideAndConquer type);
 }  // namespace seamcarve
