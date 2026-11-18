@@ -175,6 +175,28 @@ docs/                AI usage log, report notes
 
 Generated and git-ignored: `build/`, `vcpkg/` (Linux), `vcpkg-win/` (Windows).
 
+## Graph cut
+
+`FindSeamGraphCut` (`src/seam_graphcut.cpp`) turns the energy map into a flow network, runs max-flow
+(`FlowGraph` in `src/max_flow.cpp`) and reads the seam from the minimum cut. The helpers are declared in
+`include/seamcarve/seam_graphcut.hpp`.
+
+| Edge | Capacity | Purpose |
+|---|---|---|
+| source → every pixel in the first column | INF | the cut starts left of the image |
+| pixel → right neighbour (→ sink for the last column) | pixel energy | cutting it removes that pixel |
+| pixel → left neighbour | INF | the cut crosses each row exactly once |
+| pixel → left neighbours in the rows above and below | INF | the seam moves at most one column per row |
+
+Every finite cut therefore removes one connected vertical seam and costs exactly its energy, so the minimum
+cut is the same optimal seam DP finds. After `MaxFlow`, `MinCut` marks the pixels the source can still reach;
+in each row the last of these is the seam pixel (`ReadSeamFromCut`). For a `rows x cols` map the graph has
+`rows*cols + 2` nodes and `2*rows*cols + 2*(rows-1)*(cols-1)` edges (plus one reverse edge each).
+
+Tests: `seam_graphcut` checks the graph, the seam read-back and the seams found (against hand-made maps and
+a brute-force search over every seam on small random maps); `graphcut_vs_dp` checks that graph cut and DP seams
+cost the same, and is reported as skipped until `FindSeamDP` is implemented.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request, with two jobs:
