@@ -1,6 +1,7 @@
 #include "seamcarve/energy.hpp"
 #include <opencv2/imgproc.hpp>
 #include <stdexcept>
+#include <algorithm>
 
 namespace seamcarve {
     cv::Mat ComputeEnergy(const cv::Mat& image, EnergyMethod method) {
@@ -15,15 +16,26 @@ namespace seamcarve {
         throw std::invalid_argument("ComputeEnergy: unknown energy method");
     }
 
-    cv::Mat ComputeEnergyGradient(const cv::Mat& /*image*/) {
-        // TODO(Task 1a): finite differences.
-        //  1. Convert to grayscale (or handle the 3 channels and combine them).
-        //  2. dx = I(x+1, y) - I(x-1, y), dy = I(x, y+1) - I(x, y-1).
-        //  3. energy = |dx| + |dy|.
-        //  4. Decide and document how the first and last rows/columns are handled.
-        //  5. Return a CV_64F matrix
+    cv::Mat ComputeEnergyGradient(const cv::Mat& image) {
+        cv::Mat grayImg;
+        cv::cvtColor(image, grayImg, cv::COLOR_BGR2GRAY);  // convert image to grayscale
 
-        throw std::logic_error("ComputeEnergyGradient: not implemented");
+        cv::Mat energy(grayImg.rows, grayImg.cols, CV_64F);
+
+        for (int row{}; row < grayImg.rows; ++row) {
+            const auto* upRow{ grayImg.ptr<uchar>(std::max(row - 1, 0)) };      
+            const auto* downRow{ grayImg.ptr<uchar>(std::min(row + 1, grayImg.rows - 1)) };
+            const auto* currRow{ grayImg.ptr<uchar>(row) };
+
+            auto* energyRow{ energy.ptr<double>(row) };
+
+            for (int col{}; col < grayImg.cols; ++col) {
+                const int left{ std::max(col - 1, 0) }, right{ std::min(col + 1, grayImg.cols - 1) };
+                const int dx{ currRow[right] - currRow[left] }, dy{ downRow[col] - upRow[col] };
+                energyRow[col] = std::abs(dx) + std::abs(dy);
+            }
+        }
+        return energy;
     }
 
     cv::Mat ComputeEnergySobel(const cv::Mat& image) {

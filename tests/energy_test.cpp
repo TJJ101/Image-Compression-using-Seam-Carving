@@ -191,6 +191,12 @@ namespace {
         const cv::Mat energy(computeEnergy(GrayToBgr(gray)));
         if (!HasExpectedShape(energy, rows, cols, name)) return;
 
+        // Also on a random image, where dx and dy are both non-zero (the vertical edge image has dy = 0).
+        double energyMin{}, energyMax{};
+        cv::minMaxLoc(energy, &energyMin, &energyMax);
+        Check(energyMin >= 0.0, name, "energy must not be negative on a random image either (smallest value: "
+                                      + std::to_string(energyMin) + ")");
+
         cv::Mat brighter;
         gray.convertTo(brighter, CV_8U, 1.0, 50.0);  // values stay below 250, so nothing saturates
         const cv::Mat brighterEnergy(computeEnergy(GrayToBgr(brighter)));
