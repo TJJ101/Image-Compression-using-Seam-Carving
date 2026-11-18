@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
 
         CarveOptions carveOpts{};
         carveOpts.algorithm = opts.algorithm;
+        carveOpts.energyMethod = opts.energyMethod;
         carveOpts.verbose = opts.verbose;
 
         const cv::Mat result{ Carve(image, targetW, targetH, carveOpts) };

@@ -5,6 +5,7 @@
 namespace seamcarve {
     struct CarveOptions {
         Algorithm algorithm { Algorithm::DYNAMIC_PROGRAMMING };
+        EnergyMethod energyMethod{ EnergyMethod::SOBEL };  // how the energy map is computed
         bool verbose{ false };  // print per-seam progress / timing
     };
 
@@ -24,7 +25,7 @@ namespace seamcarve {
     * @param[in] image	- Input image.
     * @param[in] targetWidth	- Target width in pixels.
     * @param[in] targetHeight	- Target height in pixels.
-    * @param[in] options	- Algorithm choice and verbosity.
+    * @param[in] options	- Algorithm, energy method and verbosity.
     * @return The resized image.
     */
     cv::Mat Carve(const cv::Mat& image, int targetWidth, int targetHeight, const CarveOptions& options);

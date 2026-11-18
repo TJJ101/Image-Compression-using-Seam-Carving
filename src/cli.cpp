@@ -25,12 +25,13 @@ namespace seamcarve {
     std::string Usage() {
         return
             "Usage: seamcarve --input <file> --algo <dp|greedy|graphcut> "
-            "[--width <px>] [--height <px>] [--output <file>] [--verbose]\n"
+            "[--energy <gradient|sobel|dc>] [--width <px>] [--height <px>] [--output <file>] [--verbose]\n"
             "       seamcarve [--gui] [--input <file>]   (no arguments also opens the GUI)\n"
             "\n"
             "Options:\n"
             "  -i, --input <file>    Input image (required)\n"
             "  -a, --algo <name>     dp (default) | greedy | graphcut\n"
+            "  -e, --energy <name>   gradient | sobel (default) | dc (divide and conquer)\n"
             "  -w, --width <px>      Target width  (default: unchanged, must be <= original)\n"
             "  -H, --height <px>     Target height (default: unchanged, must be <= original)\n"
             "  -o, --output <file>   Output image (default: <input>_<algo>.<ext>)\n"
@@ -70,6 +71,8 @@ namespace seamcarve {
                 opts.output = value();
             } else if (arg == "-a" || arg == "--algo") {
                 opts.algorithm = ParseAlgorithm(value());
+            } else if (arg == "-e" || arg == "--energy") {
+                opts.energyMethod = ParseEnergyMethod(value());
             } else if (arg == "-w" || arg == "--width") {
                 opts.width = ParsePositiveInt(arg, value());
             } else if (arg == "-H" || arg == "--height") {

@@ -123,7 +123,7 @@ F5, Ctrl+Shift+B), but note:
 **CLI (Linux / WSL):**
 
 ```bash
-make run ARGS="--input <file> --algo <dp|greedy|graphcut> [--width <px>] [--height <px>] [--output <file>] [--verbose]"
+make run ARGS="--input <file> --algo <dp|greedy|graphcut> [--energy <gradient|sobel|dc>] [--width <px>] [--height <px>] [--output <file>] [--verbose]"
 ```
 
 - At least one of `--width` / `--height` is required (target size, shrink only).

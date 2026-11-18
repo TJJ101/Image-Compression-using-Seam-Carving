@@ -9,6 +9,7 @@ namespace seamcarve {
         std::string input;
         std::string output;  // empty -> derived from input + algorithm
         Algorithm algorithm{ Algorithm::DYNAMIC_PROGRAMMING };
+        EnergyMethod energyMethod{ EnergyMethod::SOBEL };
         std::optional<int> width;   // target width in pixels (default: unchanged)
         std::optional<int> height;  // target height in pixels (default: unchanged)
         bool verbose{ false };
