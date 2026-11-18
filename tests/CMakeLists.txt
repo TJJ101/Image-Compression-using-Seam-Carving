@@ -16,5 +16,10 @@ add_executable(test_seam_graphcut test_seam_graphcut.cpp)
 target_link_libraries(test_seam_graphcut PRIVATE seamcarve_core)
 add_test(NAME seam_graphcut COMMAND test_seam_graphcut)
 
+add_executable(test_graphcut_vs_dp test_graphcut_vs_dp.cpp)
+target_link_libraries(test_graphcut_vs_dp PRIVATE seamcarve_core)
+add_test(NAME graphcut_vs_dp COMMAND test_graphcut_vs_dp)
+set_tests_properties(graphcut_vs_dp PROPERTIES SKIP_RETURN_CODE 77)
+
 add_executable(bench_max_flow bench_max_flow.cpp)
 target_link_libraries(bench_max_flow PRIVATE seamcarve_core)

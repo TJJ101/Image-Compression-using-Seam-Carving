@@ -61,6 +61,23 @@ namespace seamcarve {
         return seam;
     }
 
+    double SeamCost(const cv::Mat& energy, const Seam& seam) {
+        if (energy.empty() || energy.type() != CV_64F)
+            throw std::invalid_argument("SeamCost: energy map is empty or not CV_64F");
+        if (static_cast<int>(seam.size()) != energy.rows)
+            throw std::invalid_argument("SeamCost: seam has " + std::to_string(seam.size()) + " entries for " + std::to_string(energy.rows) + " rows");
+
+        double cost{ 0.0 };
+        for (int row{ 0 }; row < energy.rows; ++row) {
+            if (seam[row] < 0 || seam[row] >= energy.cols)
+                throw std::invalid_argument("SeamCost: seam leaves the image at row " + std::to_string(row));
+            if (row > 0 && std::abs(seam[row] - seam[row - 1]) > 1)
+                throw std::invalid_argument("SeamCost: seam jumps more than one column at row " + std::to_string(row));
+            cost += energy.at<double>(row, seam[row]);
+        }
+        return cost;
+    }
+
     Seam FindSeamGraphCut(const cv::Mat& energy) {
         SeamGraph seamGraph{ BuildSeamGraph(energy) };
         seamGraph.graph.MaxFlow(seamGraph.source, seamGraph.sink);

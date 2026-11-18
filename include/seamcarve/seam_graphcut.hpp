@@ -47,4 +47,15 @@ namespace seamcarve {
     */
     Seam ReadSeamFromCut(const std::vector<bool>& sourceSide, int rows, int cols);
 
+    /**
+    * @brief Sums the energy of the pixels on a vertical seam, checking that the seam is valid:
+    * one column per row, inside the image, moving at most one column between rows.
+    * Used to compare the seams found by different algorithms.
+    * @param[in] energy	- Energy map (CV_64F).
+    * @param[in] seam	- One column index per row.
+    * @return Total energy of the seam.
+    * @throws std::invalid_argument If the energy map is empty or not CV_64F, or the seam is invalid.
+    */
+    double SeamCost(const cv::Mat& energy, const Seam& seam);
+
 }  // namespace seamcarve

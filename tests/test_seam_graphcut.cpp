@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -13,6 +16,7 @@ using seamcarve::FlowGraph;
 using seamcarve::PixelNode;
 using seamcarve::ReadSeamFromCut;
 using seamcarve::Seam;
+using seamcarve::SeamCost;
 using seamcarve::SeamGraph;
 
 int failures{ 0 };
@@ -209,6 +213,102 @@ void TestFindSeam() {
     Check("FindSeamGraphCut rejects an empty energy map", emptyThrows);
 }
 
+void TestSeamCost() {
+    // 1 2 3
+    // 4 5 6
+    // 7 8 9
+    const cv::Mat energy{ MakeEnergy(3, 3, { 1, 2, 3, 4, 5, 6, 7, 8, 9 }) };
+    Check("SeamCost: {0,1,2} costs 1 + 5 + 9", SeamCost(energy, { 0, 1, 2 }) == 15);
+    Check("SeamCost: {2,2,1} costs 3 + 6 + 8", SeamCost(energy, { 2, 2, 1 }) == 17);
+
+    auto throws = [&energy](const Seam& seam) {
+        try {
+            SeamCost(energy, seam);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    Check("SeamCost: seam with too few rows is rejected", throws({ 0, 0 }));
+    Check("SeamCost: seam outside the image is rejected", throws({ 0, 0, 3 }));
+    Check("SeamCost: negative column is rejected", throws({ -1, 0, 0 }));
+    Check("SeamCost: seam jumping two columns is rejected", throws({ 0, 2, 2 }));
+}
+
+// Random energy map. With wholeNumbers the values are 0..7, so many seams tie.
+cv::Mat RandomEnergy(int rows, int cols, unsigned seed, bool wholeNumbers) {
+    std::mt19937 rng{ seed };
+    std::uniform_real_distribution<double> dist{ 0.0, 255.0 };
+    cv::Mat energy(rows, cols, CV_64F);
+    for (int row{ 0 }; row < rows; ++row)
+        for (int col{ 0 }; col < cols; ++col) {
+            const double value{ dist(rng) };
+            energy.at<double>(row, col) = wholeNumbers ? std::floor(value / 32) : value;
+        }
+    return energy;
+}
+
+bool Near(double a, double b) {
+    return std::fabs(a - b) <= 1e-9 * std::max(1.0, std::fabs(a));
+}
+
+// Cheapest energy of all seams continuing down from (row, col), trying every one of them.
+double BruteForceFrom(const cv::Mat& energy, int row, int col) {
+    const double here{ energy.at<double>(row, col) };
+    if (row + 1 == energy.rows) return here;
+    double best{ FlowGraph::INF };
+    for (int next{ std::max(col - 1, 0) }; next <= std::min(col + 1, energy.cols - 1); ++next)
+        best = std::min(best, BruteForceFrom(energy, row + 1, next));
+    return here + best;
+}
+
+double BruteForceSeamCost(const cv::Mat& energy) {
+    double best{ FlowGraph::INF };
+    for (int col{ 0 }; col < energy.cols; ++col) best = std::min(best, BruteForceFrom(energy, 0, col));
+    return best;
+}
+
+// Graph cut on small random maps must give a valid seam that is as cheap as the best one
+// found by trying every seam, and the max flow must equal its energy.
+void TestAgainstBruteForce() {
+    const std::vector<std::vector<int>> sizes{ { 2, 2 }, { 3, 5 }, { 5, 3 }, { 6, 6 }, { 7, 9 }, { 9, 4 } };
+    for (const bool wholeNumbers : { false, true }) {
+        for (const std::vector<int>& size : sizes) {
+            const int rows{ size[0] }, cols{ size[1] };
+            bool ok{ true };
+            for (unsigned seed{ 1 }; seed <= 5; ++seed) {
+                const cv::Mat energy{ RandomEnergy(rows, cols, seed, wholeNumbers) };
+                const double best{ BruteForceSeamCost(energy) };
+                const double cost{ SeamCost(energy, FindSeamGraphCut(energy)) };
+                const double flow{ SeamGraphFlow(energy) };
+                if (!Near(cost, best) || !Near(flow, best)) {
+                    std::cout << "  seed " << seed << ": graph cut " << cost << ", max flow " << flow
+                              << ", brute force " << best << std::endl;
+                    ok = false;
+                }
+            }
+            Check(std::to_string(rows) + "x" + std::to_string(cols) + (wholeNumbers ? " whole-number" : "")
+                      + " random maps match brute force",
+                  ok);
+        }
+    }
+}
+
+void TestTies() {
+    // Every seam costs the same, so any valid seam is correct
+    const cv::Mat uniform(5, 7, CV_64F, cv::Scalar(3));
+    Check("uniform map: seam costs 5 * 3", SeamCost(uniform, FindSeamGraphCut(uniform)) == 15);
+    Check("uniform map: max flow is 15", SeamGraphFlow(uniform) == 15);
+
+    const cv::Mat zeros(4, 6, CV_64F, cv::Scalar(0));
+    Check("all-zero map: seam costs 0", SeamCost(zeros, FindSeamGraphCut(zeros)) == 0);
+    Check("all-zero map: max flow is 0", SeamGraphFlow(zeros) == 0);
+
+    // Zero-capacity edges must not stop the flow from finding the free column
+    const cv::Mat freeColumn{ MakeEnergy(3, 4, { 0, 0, 5, 5, 5, 0, 5, 5, 5, 0, 5, 0 }) };
+    Check("free path through zeros: seam costs 0", SeamCost(freeColumn, FindSeamGraphCut(freeColumn)) == 0);
+}
+
 int main() {
     TestTwoByThree();
     TestOneColumn();
@@ -217,6 +317,9 @@ int main() {
     TestReadSeam();
     TestReadSeamInvalidCut();
     TestFindSeam();
+    TestSeamCost();
+    TestAgainstBruteForce();
+    TestTies();
     std::cout << "Total failures: " << failures << std::endl;
     return failures == 0 ? 0 : 1;
 }
