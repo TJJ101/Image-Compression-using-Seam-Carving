@@ -25,6 +25,7 @@ jobs:
       # The tests drive the CLI, so they use the "vcpkg" preset (CLI + GUI), not the GUI-only release build
       - name: Configure
         run: cmake --preset vcpkg
+      # Also builds seamcarve_bench, the benchmark suite run after the tests
       - name: Build
         run: cmake --build --preset vcpkg
       - name: Run Tests
@@ -58,6 +59,11 @@ jobs:
           name: test-report
           path: ${{ github.workspace }}\TestReports
           if-no-files-found: warn
+      # Google Benchmark suite (bench/) comparing the seam-carving implementations, using the build above. Only runs if
+      # the tests passed. Writes a results table to the run summary and uploads benchmark.json; algorithms that are not
+      # implemented yet are listed as skipped.
+      - name: Run Benchmarks
+        uses: ./.github/actions/run-benchmarks
   build:
     # Only package a build that passed the tests
     needs: test

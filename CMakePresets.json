@@ -10,9 +10,12 @@
     },
     {
       "name": "vcpkg",
-      "displayName": "vcpkg manifest mode, CLI + GUI (used by the Makefile and the Windows CI job)",
+      "displayName": "vcpkg manifest mode, CLI + GUI + benchmarks (used by the Makefile and the Windows CI jobs)",
       "binaryDir": "${sourceDir}/build/cmake",
-      "cacheVariables": { "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build" },
+      "cacheVariables": {
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build",
+        "SEAMCARVE_BUILD_BENCHMARKS": "ON"
+      },
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
     },
     {

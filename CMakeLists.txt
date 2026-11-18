@@ -100,3 +100,13 @@ if(NOT SEAMCARVE_GUI_ONLY)
         add_subdirectory(tests)
     endif()
 endif()
+
+# ---- Benchmarks --------------------------------------------------------------
+# Google Benchmark suite comparing the seam-carving implementations (bench/). Needs the benchmark
+# package (installed by vcpkg from vcpkg.json); the "vcpkg" preset turns it on. Not built in a
+# GUI-only build.
+option(SEAMCARVE_BUILD_BENCHMARKS "Build the Google Benchmark suite (seamcarve_bench)" OFF)
+if(SEAMCARVE_BUILD_BENCHMARKS AND NOT SEAMCARVE_GUI_ONLY)
+    find_package(benchmark CONFIG REQUIRED)
+    add_subdirectory(bench)
+endif()

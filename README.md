@@ -72,6 +72,7 @@ After that, `make` only recompiles when a source file has changed.
 | `make gui [ARGS="-i image.png"]` | Open the interactive ImGui window (same executable; optionally with an image preloaded) |
 | `make usage` | Print the command-line usage of the CLI |
 | `make test` | Build, then run the tests |
+| `make bench [ARGS="..."]` | Build, then run the benchmarks (see [Benchmarks](#benchmarks)) |
 | `make rebuild` | Delete `build/` (keeps vcpkg) and build again |
 | `make clean` | Delete everything generated: `build/` and the repo-local `./vcpkg` |
 | `make help` | List the commands |
@@ -149,12 +150,13 @@ executable (CLI + GUI) that links it.
 | CMake setting | Meaning |
 |---|---|
 | `SEAMCARVE_BUILD_GUI` (ON by default) | Compile the ImGui/GLFW window into `seamcarve`. Without it, `--gui` reports "this build has no GUI" |
+| `SEAMCARVE_BUILD_BENCHMARKS` (OFF by default, ON in the `vcpkg` preset) | Build `seamcarve_bench`, the Google Benchmark suite in `bench/`. Ignored in a GUI-only build |
 | `SEAMCARVE_GUI_ONLY` (OFF by default) | No command-line mode; `main()` always opens the window and, with MSVC, no console window. Used by `build.bat` |
 
 | CMake preset | Used by |
 |---|---|
 | `default` | CI on Ubuntu: system OpenCV (`libopencv-dev`), GUI off |
-| `vcpkg` | `make` on Linux/WSL and CI on Windows: vcpkg dependencies, CLI + GUI |
+| `vcpkg` | `make` on Linux/WSL and CI on Windows: vcpkg dependencies, CLI + GUI + benchmarks |
 | `windows-gui` | `build.bat`: Visual Studio 2026 project, GUI-only, DLLs |
 
 ## Layout
@@ -164,10 +166,11 @@ include/seamcarve/   public headers (interfaces)
 src/                 energy, seam_dp, seam_greedy, seam_graphcut, seam_carver, types (algorithms);
                      cli, gui, main (program)
 tests/               CTest tests (they drive the CLI)
+bench/               Google Benchmark suite comparing the seam-carving implementations
 Makefile             build/run commands for Linux/WSL (wraps CMake + vcpkg)
 build.bat            build script for the Windows GUI app (Visual Studio 2026 project)
 CMakePresets.json    build presets (default, vcpkg, windows-gui)
-vcpkg.json           dependencies: OpenCV, ImGui, GLFW
+vcpkg.json           dependencies: OpenCV, ImGui, GLFW, Google Benchmark
 data/input|output    sample images / results
 docs/                AI usage log, report notes
 .github/workflows/   CI (Ubuntu + Windows)
@@ -184,6 +187,37 @@ Generated and git-ignored: `build/`, `vcpkg/` (Linux), `vcpkg-win/` (Windows).
   `vcpkg` preset (CLI + GUI).
 
 Both run the CTest tests in `tests/`. CI does not run `make` or `build.bat`.
+
+`.github/workflows/release-cloud.yml` (GitHub-hosted runners) and `.github/workflows/release.yml` (self-hosted
+runner) run on tag pushes and manual runs, with two jobs: **test** (CTest, then the benchmarks below, through the
+`.github/actions/run-benchmarks` action) and **build** (zips the Windows GUI app and attaches it to a GitHub Release on tags).
+
+## Benchmarks
+
+`bench/bench_seams.cpp` uses [Google Benchmark](https://github.com/google/benchmark) to compare the implementations on
+the test images in `data/input` (`TowerTest.jpg`, `TsunamiTest.jpg`, `NoiseTest.png`). Each image is scaled down to several
+widths (from 32 px up to its own width, keeping the aspect ratio):
+
+| Benchmark | What it measures |
+|---|---|
+| `FindSeam/<dp\|greedy\|graphcut>/<image>/<width>` | One seam on the image's energy map, plus a fitted big-O (N = width, so DP should fit O(N^2) and greedy O(N)) |
+| `Carve/<dp\|greedy\|graphcut>/<image>` | A full `Carve()` removing 10% of the columns (images scaled to 256 px, 64 px for graph cut, to keep runs short) |
+| `ComputeEnergy/<image>/<width>` | The energy map shared by all algorithms |
+
+An algorithm that still throws "not implemented" is reported as skipped, so it starts producing numbers as soon as
+it is implemented. While `ComputeEnergy` is not implemented, `FindSeam` uses the image's grayscale intensity as the
+energy map (labelled "grayscale energy"). To benchmark a new variant, add one line to `kImpls`; to add an image, add
+it to `kImages` in `bench/bench_seams.cpp`.
+
+```bash
+make bench                                       # Linux / WSL (the vcpkg preset builds build/seamcarve_bench)
+make bench ARGS="--benchmark_filter=FindSeam/dp/TowerTest"  # only some benchmarks (regex)
+make bench ARGS="--benchmark_repetitions=5 --benchmark_out=bench.json --benchmark_out_format=json"
+```
+
+In CI, the **test** job runs them once the tests passed, writes a results table to the run's summary page and uploads `benchmark.json` as the
+`benchmark-results` artifact. Timings on shared cloud runners are noisy: compare implementations within one run
+rather than across runs.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow and coding conventions, and
 [docs/ai-usage.md](docs/ai-usage.md) for the AI declaration log.
