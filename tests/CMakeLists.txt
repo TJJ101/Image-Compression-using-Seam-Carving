@@ -11,3 +11,6 @@ set_tests_properties(cli_bad_algo PROPERTIES WILL_FAIL TRUE)
 add_executable(test_max_flow test_max_flow.cpp)
 target_link_libraries(test_max_flow PRIVATE seamcarve_core)
 add_test(NAME max_flow COMMAND test_max_flow)
+
+add_executable(bench_max_flow bench_max_flow.cpp)
+target_link_libraries(bench_max_flow PRIVATE seamcarve_core)

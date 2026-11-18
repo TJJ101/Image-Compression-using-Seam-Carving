@@ -128,6 +128,7 @@ int main(){
     TestGfgExample1();
     TestGfgExample2();
     TestGfgReverseEdge();
+    TestSpecialCases();
     std::cout << "Total failures: " << failures << std::endl;
     return failures == 0 ? 0 : 1;
 }
