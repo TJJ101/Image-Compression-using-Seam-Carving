@@ -42,12 +42,28 @@ namespace seamcarve {
     * pixels, computes the energy of each block and merges the results (Question 2b).
     * The result should match the non-split method used for the blocks, including along the cuts.
     * @param[in] image	    - 8-bit BGR image (CV_8UC3).
+    * @param[in] type       - What approach to use, recursion or iteration.
     * @param[in] baseSize	- Blocks no larger than this (in both directions) are computed directly.
     * @return Single-channel CV_64F matrix, same size as the input.
     */
     cv::Mat ComputeEnergyDivideAndConquer(const cv::Mat& image, DivideAndConquer type, int baseSize = DEFAULT_BASE_SIZE);
 
+    /**
+    * @brief Uses recursion to compute the energy with divide and conquer approach.
+    * The result should match the non-split method used for the blocks, including along the cuts.
+    * @param[in] image	    - 8-bit BGR image (CV_8UC3).
+    * @param[in] baseSize	- Blocks no larger than this (in both directions) are computed directly.
+    * @return Single-channel CV_64F matrix, same size as the input.
+    */
     cv::Mat ComputeEnergyDivideAndConquerWithRecursion(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
 
+    /**
+    * @brief Uses iteration to compute the energy with divide and conquer approach.
+    * The result should match the non-split method used for the blocks, including along the cuts.
+    * @param[in] image	    - 8-bit BGR image (CV_8UC3).
+    * @param[in] baseSize	- Blocks no larger than this (in both directions) are computed
+    * directly.
+    * @return Single-channel CV_64F matrix, same size as the input.
+    */
     cv::Mat ComputeEnergyDivideAndConquerWithIteration(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
 }  // namespace seamcarve

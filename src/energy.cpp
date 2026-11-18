@@ -51,19 +51,10 @@ namespace seamcarve {
     }
 
     cv::Mat ComputeEnergyDivideAndConquer(const cv::Mat& image, DivideAndConquer type, int baseSize) {
-        // TODO(Question 2b): divide and conquer.
-        //  1. If the block is at most baseSize in both directions, compute it directly (Sobel or gradient).
-        //  2. Otherwise split it in two, recurse on each half and merge into one result.
-        //  3. A pixel next to a cut needs its neighbour from the other half: give every block a 1-pixel
-        //     overlap (a "halo") so the merged result equals the unsplit computation.
-        //  4. Compare running time against the direct methods; the halves are independent, so this is also
-        //     where multithreading (analysis 5d) could be tried.
-
         switch (type) {
             case DivideAndConquer::RECURSION: return ComputeEnergyDivideAndConquerWithRecursion(image, baseSize);
             case DivideAndConquer::ITERATION: return ComputeEnergyDivideAndConquerWithIteration(image, baseSize);
         }
-
         throw std::invalid_argument("ComputeEnergyDivideAndConquer: Invalid Divide and Conquer type.");
     }
 
