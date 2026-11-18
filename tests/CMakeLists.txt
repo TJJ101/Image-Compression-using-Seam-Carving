@@ -12,5 +12,9 @@ add_executable(test_max_flow test_max_flow.cpp)
 target_link_libraries(test_max_flow PRIVATE seamcarve_core)
 add_test(NAME max_flow COMMAND test_max_flow)
 
+add_executable(test_seam_graphcut test_seam_graphcut.cpp)
+target_link_libraries(test_seam_graphcut PRIVATE seamcarve_core)
+add_test(NAME seam_graphcut COMMAND test_seam_graphcut)
+
 add_executable(bench_max_flow bench_max_flow.cpp)
 target_link_libraries(bench_max_flow PRIVATE seamcarve_core)
