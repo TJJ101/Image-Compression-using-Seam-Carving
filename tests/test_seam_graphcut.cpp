@@ -9,6 +9,8 @@ using seamcarve::BuildSeamGraph;
 using seamcarve::FlowEdge;
 using seamcarve::FlowGraph;
 using seamcarve::PixelNode;
+using seamcarve::ReadSeamFromCut;
+using seamcarve::Seam;
 using seamcarve::SeamGraph;
 
 int failures{ 0 };
@@ -114,11 +116,66 @@ void TestInvalidInput() {
     Check("non-CV_64F energy map is rejected", throws(cv::Mat(2, 2, CV_32F, cv::Scalar(1))));
 }
 
+// Source side of a cut that removes seam[row] in every row: columns 0..seam[row] plus the
+// source node. Sizes and values are not checked, so broken cuts can be built from it too.
+std::vector<bool> MakeCut(int rows, int cols, const Seam& seam) {
+    std::vector<bool> sourceSide(rows * cols + 2, false);
+    for (int row{ 0 }; row < rows; ++row)
+        for (int col{ 0 }; col <= seam[row]; ++col) sourceSide[PixelNode(row, col, cols)] = true;
+    sourceSide[rows * cols] = true;
+    return sourceSide;
+}
+
+// True if ReadSeamFromCut throws the given exception type.
+template <typename Exception>
+bool ReadThrows(const std::vector<bool>& sourceSide, int rows, int cols) {
+    try {
+        ReadSeamFromCut(sourceSide, rows, cols);
+    } catch (const Exception&) {
+        return true;
+    }
+    return false;
+}
+
+void TestReadSeam() {
+    const Seam middle{ 1, 2, 1 };
+    Check("3x4: seam {1,2,1} is read back", ReadSeamFromCut(MakeCut(3, 4, middle), 3, 4) == middle);
+
+    const Seam first{ 0, 0, 0 };
+    Check("3x4: seam in the first column is read back", ReadSeamFromCut(MakeCut(3, 4, first), 3, 4) == first);
+
+    const Seam last{ 3, 3, 2 };
+    Check("3x4: seam in the last column is read back", ReadSeamFromCut(MakeCut(3, 4, last), 3, 4) == last);
+
+    Check("1x1: the only pixel is the seam", ReadSeamFromCut(MakeCut(1, 1, { 0 }), 1, 1) == Seam{ 0 });
+    Check("1x3: single row is read back", ReadSeamFromCut(MakeCut(1, 3, { 2 }), 1, 3) == Seam{ 2 });
+    Check("3x1: single column is read back", ReadSeamFromCut(MakeCut(3, 1, first), 3, 1) == first);
+}
+
+void TestReadSeamInvalidCut() {
+    std::vector<bool> gap{ MakeCut(3, 4, { 1, 1, 1 }) };
+    gap[PixelNode(1, 3, 4)] = true;
+    Check("row cut more than once is rejected", ReadThrows<std::logic_error>(gap, 3, 4));
+
+    std::vector<bool> emptyRow{ MakeCut(3, 4, { 1, 1, 1 }) };
+    emptyRow[PixelNode(2, 0, 4)] = false;
+    emptyRow[PixelNode(2, 1, 4)] = false;
+    Check("row with no source-side pixel is rejected", ReadThrows<std::logic_error>(emptyRow, 3, 4));
+
+    Check("seam jumping two columns is rejected",
+          ReadThrows<std::logic_error>(MakeCut(3, 4, { 0, 2, 2 }), 3, 4));
+
+    Check("sourceSide smaller than the image is rejected",
+          ReadThrows<std::invalid_argument>(std::vector<bool>(5, true), 2, 3));
+}
+
 int main() {
     TestTwoByThree();
     TestOneColumn();
     TestOneRow();
     TestInvalidInput();
+    TestReadSeam();
+    TestReadSeamInvalidCut();
     std::cout << "Total failures: " << failures << std::endl;
     return failures == 0 ? 0 : 1;
 }

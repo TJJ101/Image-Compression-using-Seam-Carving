@@ -1,6 +1,8 @@
 #pragma once
+#include <vector>
 #include <opencv2/core.hpp>
 #include "seamcarve/max_flow.hpp"
+#include "seamcarve/types.hpp"
 
 namespace seamcarve {
     // The flow network for one vertical seam. Pixel (row, col) is node row * cols + col,
@@ -31,5 +33,18 @@ namespace seamcarve {
     * @throws std::invalid_argument If the energy map is empty or not CV_64F.
     */
     SeamGraph BuildSeamGraph(const cv::Mat& energy);
+
+    /**
+    * @brief Reads the vertical seam from the source side of a minimum cut of the seam graph.
+    * In every row the source side must be a run of pixels starting at column 0; the last pixel of
+    * that run is the one removed. Neighbouring rows must differ by at most one column.
+    * @param[in] sourceSide	- sourceSide[v] is true if node v is on the source side (FlowGraph::MinCut).
+    * @param[in] rows	- Height of the energy map.
+    * @param[in] cols	- Width of the energy map.
+    * @return One column index per row.
+    * @throws std::invalid_argument If sourceSide has fewer than rows * cols entries.
+    * @throws std::logic_error If the cut does not describe a valid seam.
+    */
+    Seam ReadSeamFromCut(const std::vector<bool>& sourceSide, int rows, int cols);
 
 }  // namespace seamcarve
