@@ -9,11 +9,14 @@ namespace seamcarve {
 
     /**
     * @brief Finds the minimum-energy vertical seam using dynamic programming (optimal).
+    * This is the default entry point: it calls FindSeamDPTwoRows. FindSeamDPFullTable returns exactly
+    * the same seam with more memory; both have the same signature so they can be benchmarked side by side.
     * Task 1b, implemented in src/seam_dp.cpp.
-    * @param[in] energy	- Energy map (CV_64F).
+    * @param[in] energy	        - Energy map (CV_64F).
+    * @param[in] useFullTable   - Whether to keep the full DP table or only keep what's needed (two rows). Defaulted to false.
     * @return One column index per row.
     */
-    Seam FindSeamDP(const cv::Mat& energy);
+    Seam FindSeamDP(const cv::Mat& energy, bool useFullTable = false);
 
     /**
     * @brief Finds a vertical seam using a greedy row-by-row choice.

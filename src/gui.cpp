@@ -1,6 +1,6 @@
 // Interactive front end (Dear ImGui + GLFW + OpenGL), compiled into the main executable.
 // This is only the window/UI scaffolding: load an image (type its path or drag and drop it onto the
-// window), pick an algorithm, choose a target size, press "Carve" and save the result. The seam
+// window), pick an algorithm and energy method, choose a target size, press "Carve" and save the result. The seam
 // carving itself lives in the core library; until it is implemented the status bar shows its error.
 // Carving runs on a worker thread (see StartCarve() / CheckCarveThread()) so the window stays responsive.
 #include "seamcarve/gui.hpp"
@@ -43,6 +43,9 @@ namespace seamcarve {
             GLuint resultTexture{};
             char pathBuffer[512]{};
             int algorithmIndex{};  // 0 = DP, 1 = greedy, 2 = graph cut (same order as Algorithm)
+            int energyIndex{ static_cast<int>(EnergyMethod::SOBEL) };  // 0 = gradient, 1 = Sobel, 2 = divide and conquer (same order as EnergyMethod)
+            int divideAndConquerIndex{};  // 0 = recursion, 1 = iteration (same order as DivideAndConquer)
+            int baseSize{ DEFAULT_BASE_SIZE };  // block size where divide and conquer stops splitting
             int targetWidth{};
             int targetHeight{};
             int scalePercent{ 100 };      // target size as a percentage of the original (Scale % slider)
@@ -257,10 +260,33 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Starts seam carving with the selected algorithm and target size on a worker thread, so
-        * the window keeps redrawing (progress bar, Cancel button) while it runs. CheckCarveThread() collects
-        * the result. Only one carve runs at a time.
-        * @param[in,out] state	- UI state; the job, progress counters and status bar are updated.
+        * @brief Block size range allowed for the loaded image and divide-and-conquer type.
+        * Recursion needs blocks of at least 3 px (its halves overlap by a pixel); iteration works
+        * down to 1. At the image's larger side nothing is split, so the result equals plain Sobel.
+        * (The maximum is kept at least the minimum so the range stays valid for images under 3 px.)
+        * @param[in] state	- UI state (loaded image and divide-and-conquer type).
+        * @return The {minimum, maximum} block size in pixels.
+        */
+        std::pair<int, int> BaseSizeRange(const GuiState& state) {
+            const int minBaseSize{ static_cast<DivideAndConquer>(state.divideAndConquerIndex) == DivideAndConquer::RECURSION ? 3 : 1 };
+            return { minBaseSize, std::max({ state.original.cols, state.original.rows, minBaseSize }) };
+        }
+
+        /**
+        * @brief Block size actually used: the chosen one, limited to BaseSizeRange(). The chosen
+        * value itself is never changed, so it comes back when a larger image or the other type
+        * allows it again.
+        * @param[in] state	- UI state.
+        * @return The block size in pixels.
+        */
+        int EffectiveBaseSize(const GuiState& state) {
+            const auto [minBaseSize, maxBaseSize]{ BaseSizeRange(state) };
+            return std::clamp(state.baseSize, minBaseSize, maxBaseSize);
+        }
+
+        /**
+        * @brief Runs seam carving with the selected algorithm, energy method and target size.
+        * @param[in,out] state	- UI state; the result texture and status bar are updated.
         */
         void StartCarve(GuiState& state) {
             if (IsCarving(state)) return;
@@ -274,6 +300,9 @@ namespace seamcarve {
             state.cancelCarve = false;
             state.seamsTotal = (state.original.cols - state.targetWidth) + (state.original.rows - state.targetHeight);
             state.carveStart = std::chrono::steady_clock::now();
+            options.energyMethod = static_cast<EnergyMethod>(state.energyIndex);
+            options.divideAndConquerType = static_cast<DivideAndConquer>(state.divideAndConquerIndex);
+            options.baseSize = EffectiveBaseSize(state);
 
             try {
                 // The worker gets its own copy of the image, so nothing the UI does can change it mid-carve.
@@ -522,6 +551,7 @@ namespace seamcarve {
 
             if (ImGui::Checkbox("Keep aspect ratio", &state.keepAspectRatio) && state.keepAspectRatio) {
                 state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
+                state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetWidth) / originalWidth);
             }
 
             // Reset, right-aligned on the same row as the checkbox.
@@ -540,13 +570,14 @@ namespace seamcarve {
                 state.targetHeight = ScaleDimension(originalHeight, state.scalePercent / 100.0);
             }
 
-            if (ImGui::SliderInt("Width", &state.targetWidth, 1, originalWidth, "%d px", sliderFlags)) {
-                if (state.keepAspectRatio) state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
+            // With the aspect ratio unlocked, Width and Height are independent and leave Scale % alone.
+            if (ImGui::SliderInt("Width", &state.targetWidth, 1, originalWidth, "%d px", sliderFlags) && state.keepAspectRatio) {
+                state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
                 state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetWidth) / originalWidth);
             }
 
-            if (ImGui::SliderInt("Height", &state.targetHeight, 1, originalHeight, "%d px", sliderFlags)) {
-                if (state.keepAspectRatio) state.targetWidth = ScaleDimension(originalWidth, static_cast<double>(state.targetHeight) / originalHeight);
+            if (ImGui::SliderInt("Height", &state.targetHeight, 1, originalHeight, "%d px", sliderFlags) && state.keepAspectRatio) {
+                state.targetWidth = ScaleDimension(originalWidth, static_cast<double>(state.targetHeight) / originalHeight);
                 state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetHeight) / originalHeight);
             }
 
@@ -577,9 +608,33 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Draws the control panel: image path + Load, algorithm, target size, Carve / Save
-        * buttons and view options. While a carve runs, the image and settings are locked and the
-        * Carve button is replaced by its progress.
+        * @brief Draws the energy widgets: the energy method and, for divide and conquer only, its
+        * type (recursion / iteration) and block size.
+        * @param[in,out] state	- UI state edited by the widgets.
+        */
+        void DrawEnergyControls(GuiState& state) {
+            ImGui::SeparatorText("Energy");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::Combo("##energy", &state.energyIndex, "Gradient\0Sobel\0Divide and conquer\0");
+            ImGui::SetItemTooltip("How the energy map (which pixels matter) is computed");
+
+            if (static_cast<EnergyMethod>(state.energyIndex) != EnergyMethod::DIVIDE_AND_CONQUER) return;
+
+            ImGui::Combo("Type", &state.divideAndConquerIndex, "Recursion\0Iteration\0");
+
+            // The slider edits a limited copy, so the chosen size is only changed when the user moves it
+            // (not just because a smaller image or the recursion minimum limits it for now).
+            const auto [minBaseSize, maxBaseSize]{ BaseSizeRange(state) };
+            int shownBaseSize{ EffectiveBaseSize(state) };
+            if (ImGui::SliderInt("Block size", &shownBaseSize, minBaseSize, maxBaseSize, "%d px", ImGuiSliderFlags_AlwaysClamp)) {
+                state.baseSize = shownBaseSize;
+            }
+            ImGui::SetItemTooltip("Blocks this size or smaller are computed directly instead of being split");
+        }
+
+        /**
+        * @brief Draws the control panel: image path + Load, algorithm, energy, target size, Carve / Save
+        * buttons and view options.
         * @param[in,out] state	- UI state edited by the widgets.
         */
         void DrawControls(GuiState& state) {
@@ -602,6 +657,7 @@ namespace seamcarve {
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 ImGui::Combo("##algorithm", &state.algorithmIndex, "Dynamic programming\0Greedy\0Graph cut\0");
 
+                DrawEnergyControls(state);
                 DrawSizeControls(state);
             }
             ImGui::EndDisabled();

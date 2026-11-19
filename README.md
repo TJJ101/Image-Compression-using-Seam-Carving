@@ -141,7 +141,8 @@ make run ARGS="-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.pn
 **GUI (Linux / WSL: `make gui`; Windows: `build.bat run` or double-click `build\seamcarve.exe`):**
 type an image path and press Load (or drag and drop an image file onto the window; on Windows only, since WSL does
 not pass drops from Windows apps; in WSL you can type or paste a Windows path such as `C:\Users\me\cat.png` and it is
-opened as `/mnt/c/Users/me/cat.png`), pick an algorithm, set the target size with the Scale % / Width / Height
+opened as `/mnt/c/Users/me/cat.png`), pick an algorithm and an energy method (Gradient, Sobel or Divide and
+conquer; for divide and conquer also its type, recursion or iteration, and block size), set the target size with the Scale % / Width / Height
 sliders ("Keep aspect ratio" moves them together, Reset goes back to the original size) and press Carve. Save
 result writes the carved image next to the original as `<name>_carved_<width>x<height>.<ext>`. The original and
 the result are shown in their own windows at the same scale ("Fit images to window" scales them to fit, untick it
