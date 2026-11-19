@@ -62,3 +62,11 @@ target_link_libraries(seam_carver_test PRIVATE seamcarve_core)
 seamcarve_set_warnings(seam_carver_test)
 set_target_properties(seam_carver_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME seam_carver COMMAND seam_carver_test)
+
+# Energy update tests: after every removed seam the updated energy map must equal a full recompute (for every
+# energy method), and Carve() must equal the plain "recompute everything after every seam" loop.
+add_executable(energy_update_test energy_update_test.cpp)
+target_link_libraries(energy_update_test PRIVATE seamcarve_core)
+seamcarve_set_warnings(energy_update_test)
+set_target_properties(energy_update_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME energy_update COMMAND energy_update_test)
