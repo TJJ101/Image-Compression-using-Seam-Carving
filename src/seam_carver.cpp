@@ -27,7 +27,7 @@ namespace seamcarve {
             if (cut < 0 || cut >= image.cols)
                 throw std::out_of_range("RemoveSeam: seam index out of range");
 
-            const uchar* sr =  image.ptr<uchar>(row);
+            const uchar* src =  image.ptr<uchar>(row);
             uchar* dst = out.ptr<uchar>(row);
             std::memcpy(dst, src, cut * px);                                  // left of the seam
             std::memcpy(dst + cut * px, src + (cut + 1) * px,
