@@ -1,6 +1,6 @@
 // Interactive front end (Dear ImGui + GLFW + OpenGL), compiled into the main executable.
 // This is only the window/UI scaffolding: load an image (type its path or drag and drop it onto the
-// window), pick an algorithm, choose a target size, press "Carve" and save the result. The seam
+// window), pick an algorithm and energy method, choose a target size, press "Carve" and save the result. The seam
 // carving itself lives in the core library; until it is implemented the status bar shows its error.
 #include "seamcarve/gui.hpp"
 #include "seamcarve/gui_theme.hpp"
@@ -38,6 +38,9 @@ namespace seamcarve {
             GLuint resultTexture{};
             char pathBuffer[512]{};
             int algorithmIndex{};  // 0 = DP, 1 = greedy, 2 = graph cut (same order as Algorithm)
+            int energyIndex{ static_cast<int>(EnergyMethod::SOBEL) };  // 0 = gradient, 1 = Sobel, 2 = divide and conquer (same order as EnergyMethod)
+            int divideAndConquerIndex{};  // 0 = recursion, 1 = iteration (same order as DivideAndConquer)
+            int baseSize{ DEFAULT_BASE_SIZE };  // block size where divide and conquer stops splitting
             int targetWidth{};
             int targetHeight{};
             int scalePercent{ 100 };      // target size as a percentage of the original (Scale % slider)
@@ -222,12 +225,15 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Runs seam carving with the selected algorithm and target size.
+        * @brief Runs seam carving with the selected algorithm, energy method and target size.
         * @param[in,out] state	- UI state; the result texture and status bar are updated.
         */
         void RunCarve(GuiState& state) {
             CarveOptions options{};
             options.algorithm = static_cast<Algorithm>(state.algorithmIndex);
+            options.energyMethod = static_cast<EnergyMethod>(state.energyIndex);
+            options.divideAndConquerType = static_cast<DivideAndConquer>(state.divideAndConquerIndex);
+            options.baseSize = state.baseSize;
 
             try {
                 state.result = Carve(state.original, state.targetWidth, state.targetHeight, options);
@@ -485,7 +491,32 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Draws the control panel: image path + Load, algorithm, target size, Carve / Save
+        * @brief Draws the energy widgets: the energy method and, for divide and conquer only, its
+        * type (recursion / iteration) and block size.
+        * @param[in,out] state	- UI state edited by the widgets.
+        */
+        void DrawEnergyControls(GuiState& state) {
+            ImGui::SeparatorText("Energy");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::Combo("##energy", &state.energyIndex, "Gradient\0Sobel\0Divide and conquer\0");
+            ImGui::SetItemTooltip("How the energy map (which pixels matter) is computed");
+
+            if (static_cast<EnergyMethod>(state.energyIndex) != EnergyMethod::DIVIDE_AND_CONQUER) return;
+
+            ImGui::Combo("Type", &state.divideAndConquerIndex, "Recursion\0Iteration\0");
+
+            // Recursion needs blocks of at least 3 px (its halves overlap by a pixel); iteration works down to 1.
+            const int minBaseSize{ static_cast<DivideAndConquer>(state.divideAndConquerIndex) == DivideAndConquer::RECURSION ? 3 : 1 };
+            // At the image's larger side nothing is split, so the result equals plain Sobel. (Kept at least
+            // minBaseSize so the range stays valid for images smaller than 3 px.)
+            const int maxBaseSize{ std::max({ state.original.cols, state.original.rows, minBaseSize }) };
+            state.baseSize = std::clamp(state.baseSize, minBaseSize, maxBaseSize);
+            ImGui::SliderInt("Block size", &state.baseSize, minBaseSize, maxBaseSize, "%d px", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SetItemTooltip("Blocks this size or smaller are computed directly instead of being split");
+        }
+
+        /**
+        * @brief Draws the control panel: image path + Load, algorithm, energy, target size, Carve / Save
         * buttons and view options.
         * @param[in,out] state	- UI state edited by the widgets.
         */
@@ -506,6 +537,7 @@ namespace seamcarve {
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 ImGui::Combo("##algorithm", &state.algorithmIndex, "Dynamic programming\0Greedy\0Graph cut\0");
 
+                DrawEnergyControls(state);
                 DrawSizeControls(state);
 
                 ImGui::Dummy(ImVec2{ 0.0f, ImGui::GetStyle().ItemSpacing.y * 0.5f });
