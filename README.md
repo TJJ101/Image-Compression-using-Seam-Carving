@@ -233,8 +233,8 @@ widths (from 32 px up to its own width, keeping the aspect ratio):
 
 | Benchmark | What it measures |
 |---|---|
-| `FindSeam/<dp\|greedy\|graphcut>/<image>/<width>` | One seam on the image's energy map, plus a fitted big-O (N = width, so DP should fit O(N^2) and greedy O(N)) |
-| `Carve/<dp\|greedy\|graphcut>/<image>` | A full `Carve()` removing 10% of the columns (images scaled to 256 px, 64 px for graph cut, to keep runs short) |
+| `FindSeam/<dp\|greedy\|graphcut>/<image>/<width>` | One seam on the image's energy map, plus a fitted big-O (N = width, so DP should fit O(N^2) and greedy O(N)) and the seam's total energy (`seam_energy`). A seam that is not valid (wrong length, out of range, or jumping more than one column) is reported as an error |
+| `Carve/<dp\|greedy\|graphcut>/<image>/<width>` | A full `Carve()` removing 10% of the columns, at 64 px and 256 px wide (graph cut only at 64 px, to keep runs short) |
 | `ComputeEnergy/<image>/<width>` | The energy map shared by all algorithms |
 
 An algorithm that still throws "not implemented" is reported as skipped, so it starts producing numbers as soon as
@@ -248,8 +248,22 @@ make bench ARGS="--benchmark_filter=FindSeam/dp/TowerTest"  # only some benchmar
 make bench ARGS="--benchmark_repetitions=5 --benchmark_out=bench.json --benchmark_out_format=json"
 ```
 
-In CI, the **test** job runs them once the tests passed, writes a results table to the run's summary page and uploads `benchmark.json` as the
-`benchmark-results` artifact. Timings on shared cloud runners are noisy: compare implementations within one run
+In CI, the **test** job runs them once the tests passed and uploads `benchmark.json` as the `benchmark-results` artifact.
+`.github/actions/run-benchmarks/summarize.ps1` writes tables to the run's summary page that put the algorithms side by side:
+
+- **At a glance**: per algorithm, how often it was fastest, its median time relative to the fastest, and how many of its
+  seams were optimal, with the median and worst extra seam energy compared with DP (which always finds the minimum)
+- **FindSeam time** and **seam energy**: one row per image and width, one column per algorithm
+- **Carve time**, the **fitted complexity** per algorithm and image, and (collapsed) `ComputeEnergy` and every raw result
+
+The same tables can be made locally from a JSON report:
+
+```powershell
+build\seamcarve_bench.exe --benchmark_out=bench.json --benchmark_out_format=json --benchmark_repetitions=3
+.github\actions\run-benchmarks\summarize.ps1 -Json bench.json -Repetitions 3 -SummaryPath bench.md
+```
+
+Times in the tables are wall-clock (CPU time on Windows only advances in ~15.6 ms steps). Timings on shared cloud runners are noisy: compare implementations within one run
 rather than across runs.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow and coding conventions, and

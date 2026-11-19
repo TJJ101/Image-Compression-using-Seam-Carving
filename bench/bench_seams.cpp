@@ -3,9 +3,15 @@
 // Every implementation is one entry in kImpls below; adding a variant (e.g. a second max-flow
 // algorithm) only needs another entry. For each test image (kImages) scaled to several widths:
 //   FindSeam/<impl>/<image>/<width>   one seam on the image's energy map, with a fitted big-O (N = width)
-//   Carve/<impl>/<image>              full Carve() removing 10% of the columns
+//                                     and the seam's total energy (the "seam_energy" counter)
+//   Carve/<impl>/<image>/<width>      full Carve() removing 10% of the columns, at the kCarveWidths
 //   ComputeEnergy/<image>/<width>     the energy map shared by all algorithms
-// Images are only scaled down (never past their own width), keeping their aspect ratio.
+// Images are only scaled down (never past their own width), keeping their aspect ratio. Every
+// implementation runs at the same widths (up to its own limit), so the CI summary can put them side
+// by side: speed relative to the fastest, and seam energy relative to DP (which is optimal).
+//
+// A FindSeam whose seam is not valid (wrong length, a column out of range, or a jump of more than one
+// column between rows) is reported as an error, since its timing and energy would mean nothing.
 //
 // An implementation that still throws "not implemented" is reported as skipped (it starts producing
 // numbers as soon as it is implemented); any other exception is reported as an error. While
@@ -18,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <stdexcept>
 #include <string>
@@ -50,10 +57,10 @@ namespace {
     };
 
     // The DP and greedy finders go through lambdas because their optional parameters (useFullTable, seed) stop them
-    // converting to FindFn.
+    // converting to FindFn. Greedy gets a fixed seed so its seam, and so its seam energy, is the same in every run.
     const std::vector<Impl> kImpls = {
         { "dp", Algorithm::DYNAMIC_PROGRAMMING, [](const cv::Mat& e) { return FindSeamDP(e); }, 1024, 256 },
-        { "greedy", Algorithm::GREEDY, [](const cv::Mat& e) { return FindSeamGreedy(e); }, 1024, 256 },
+        { "greedy", Algorithm::GREEDY, [](const cv::Mat& e) { return FindSeamGreedy(e, 1); }, 1024, 256 },
         { "graphcut", Algorithm::GRAPH_CUT, FindSeamGraphCut, 128, 64 },
     };
 
@@ -62,6 +69,8 @@ namespace {
 
     constexpr int kMinWidth = 32;
     constexpr int kMaxEnergyWidth = 1024;
+    // Widths the Carve benchmarks run at; each implementation uses the ones up to its carveWidth
+    const int kCarveWidths[] = { 64, 256 };
 
     // ---- Probing: does an implementation run at all? ----------------------------------------
     enum class Status { Ok, Skip, Error };
@@ -144,6 +153,32 @@ namespace {
         return energy;
     }
 
+    // ---- Seam checks ------------------------------------------------------------------------
+    // Returns why a vertical seam is not valid for the energy map, or an empty string if it is.
+    std::string SeamProblem(const cv::Mat& energy, const Seam& seam) {
+        if (static_cast<int>(seam.size()) != energy.rows) {
+            return "seam has " + std::to_string(seam.size()) + " entries for " + std::to_string(energy.rows) + " rows";
+        }
+        for (int row = 0; row < energy.rows; ++row) {
+            if (seam[row] < 0 || seam[row] >= energy.cols) {
+                return "seam column " + std::to_string(seam[row]) + " out of range in row " + std::to_string(row);
+            }
+            if (row > 0 && std::abs(seam[row] - seam[row - 1]) > 1) {
+                return "seam jumps more than one column at row " + std::to_string(row);
+            }
+        }
+        return {};
+    }
+
+    // Total energy of the pixels on a vertical seam (lower is better; DP finds the minimum)
+    double SeamEnergy(const cv::Mat& energy, const Seam& seam) {
+        double total = 0.0;
+        for (int row = 0; row < energy.rows; ++row) {
+            total += energy.at<double>(row, seam[row]);
+        }
+        return total;
+    }
+
     // ---- Benchmarks -------------------------------------------------------------------------
     void RegisterComputeEnergy(const std::vector<Sample>& samples, const Probe& probe) {
         if (probe.status != Status::Ok) {
@@ -173,6 +208,14 @@ namespace {
         for (const Sample& sample : samples) {
             benchmark::RegisterBenchmark(base + "/" + sample.name, [find = impl.find, full = sample.image](benchmark::State& state) {
                 const cv::Mat energy = EnergyFor(ScaleToWidth(full, static_cast<int>(state.range(0))));
+                // Check the seam once, outside the timed loop, and keep its energy to compare against DP
+                const Seam checked = find(energy);
+                const std::string problem = SeamProblem(energy, checked);
+                if (!problem.empty()) {
+                    state.SkipWithError(problem);
+                    return;
+                }
+                state.counters["seam_energy"] = SeamEnergy(energy, checked);
                 for (auto _ : state) {
                     Seam seam = find(energy);
                     benchmark::DoNotOptimize(seam);
@@ -198,16 +241,27 @@ namespace {
             return;
         }
         for (const Sample& sample : samples) {
-            const cv::Mat image = ScaleToWidth(sample.image, impl.carveWidth);
-            const int targetWidth = image.cols - image.cols / 10;
-            benchmark::RegisterBenchmark(base + "/" + sample.name, [image, targetWidth, options](benchmark::State& state) {
-                for (auto _ : state) {
-                    cv::Mat carved = Carve(image, targetWidth, image.rows, options);
-                    benchmark::DoNotOptimize(carved.data);
+            int previousWidth = 0;
+            for (const int width : kCarveWidths) {
+                if (width > impl.carveWidth) {
+                    continue;
                 }
-                state.counters["seams"] = image.cols - targetWidth;
-                state.counters["pixels"] = static_cast<double>(image.total());
-            })->Unit(benchmark::kMillisecond);
+                const cv::Mat image = ScaleToWidth(sample.image, width);
+                if (image.cols == previousWidth) {
+                    continue;  // the image is narrower than this width, so it was not scaled again
+                }
+                previousWidth = image.cols;
+                const int targetWidth = image.cols - image.cols / 10;
+                const std::string name = base + "/" + sample.name + "/" + std::to_string(image.cols);
+                benchmark::RegisterBenchmark(name, [image, targetWidth, options](benchmark::State& state) {
+                    for (auto _ : state) {
+                        cv::Mat carved = Carve(image, targetWidth, image.rows, options);
+                        benchmark::DoNotOptimize(carved.data);
+                    }
+                    state.counters["seams"] = image.cols - targetWidth;
+                    state.counters["pixels"] = static_cast<double>(image.total());
+                })->Unit(benchmark::kMillisecond);
+            }
         }
     }
 }  // namespace
