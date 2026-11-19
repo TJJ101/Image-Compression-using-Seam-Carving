@@ -11,7 +11,7 @@ namespace {
 }
 
 namespace seamcarve {
-    Seam FindSeamGreedy(const cv::Mat& energy, int seed) {
+    Seam FindSeamGreedy(const cv::Mat& energy, unsigned seed) {
         // TODO(Task 3): pick min-energy start pixel, then the cheapest of the 3 neighbours each row.
         std::mt19937 temp(rng_gen(seed));
         std::mt19937* rng(seed ? &temp : &rng_device);
