@@ -20,7 +20,7 @@
     },
     {
       "name": "windows-gui",
-      "displayName": "Windows GUI-only app as a Visual Studio 2026 project, DLLs next to the exe (used by build.bat)",
+      "displayName": "Windows GUI-only app + benchmarks as a Visual Studio 2026 solution, DLLs next to the exes (used by build.bat)",
       "inherits": "vcpkg",
       "generator": "Visual Studio 18 2026",
       "architecture": { "value": "x64", "strategy": "set" },

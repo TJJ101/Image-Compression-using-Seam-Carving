@@ -114,11 +114,12 @@ if(NOT SEAMCARVE_GUI_ONLY)
 endif()
 
 # ---- Benchmarks --------------------------------------------------------------
-# Google Benchmark suite comparing the seam-carving implementations (bench/). Needs the benchmark
-# package (installed by vcpkg from vcpkg.json); the "vcpkg" preset turns it on. Not built in a
-# GUI-only build.
+# Google Benchmark suite comparing the seam-carving implementations (bench/), built as its own
+# console program and Visual Studio project, seamcarve_bench. It only links seamcarve_core, so it is
+# built in a GUI-only build too. Needs the benchmark package (installed by vcpkg from vcpkg.json);
+# the "vcpkg" and "windows-gui" presets turn it on.
 option(SEAMCARVE_BUILD_BENCHMARKS "Build the Google Benchmark suite (seamcarve_bench)" OFF)
-if(SEAMCARVE_BUILD_BENCHMARKS AND NOT SEAMCARVE_GUI_ONLY)
+if(SEAMCARVE_BUILD_BENCHMARKS)
     find_package(benchmark CONFIG REQUIRED)
     add_subdirectory(bench)
 endif()

@@ -156,19 +156,19 @@ title bar onto another to dock it (or to tab it), and drag the dividers to resiz
 ## Project structure
 
 CMake builds two things: `seamcarve_core`, a static library holding all the algorithms, and the `seamcarve`
-executable (CLI + GUI) that links it.
+executable (CLI + GUI) that links it, plus the optional `seamcarve_bench` benchmark program.
 
 | CMake setting | Meaning |
 |---|---|
 | `SEAMCARVE_BUILD_GUI` (ON by default) | Compile the ImGui/GLFW window into `seamcarve`. Without it, `--gui` reports "this build has no GUI" |
-| `SEAMCARVE_BUILD_BENCHMARKS` (OFF by default, ON in the `vcpkg` preset) | Build `seamcarve_bench`, the Google Benchmark suite in `bench/`. Ignored in a GUI-only build |
+| `SEAMCARVE_BUILD_BENCHMARKS` (OFF by default, ON in the `vcpkg` preset) | Build `seamcarve_bench`, the Google Benchmark suite in `bench/`, as its own program (and Visual Studio project) |
 | `SEAMCARVE_GUI_ONLY` (OFF by default) | No command-line mode; `main()` always opens the window and, with MSVC, no console window. Used by `build.bat` |
 
 | CMake preset | Used by |
 |---|---|
 | `default` | CI on Ubuntu: system OpenCV (`libopencv-dev`), GUI off |
 | `vcpkg` | `make` on Linux/WSL and CI on Windows: vcpkg dependencies, CLI + GUI + benchmarks |
-| `windows-gui` | `build.bat`: Visual Studio 2026 project, GUI-only, DLLs |
+| `windows-gui` | `build.bat`: Visual Studio 2026 solution, GUI-only app + benchmarks, DLLs |
 
 ## Layout
 

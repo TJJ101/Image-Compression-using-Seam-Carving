@@ -89,7 +89,8 @@ jobs:
             default { throw "Unsupported Visual Studio version '$Year'" }
           }
           Write-Host "Using generator '$Generator'"
-          cmake --preset windows-gui -G "$Generator"
+          # The benchmarks (built and run by the test job) are left out so benchmark.dll does not end up in the zip
+          cmake --preset windows-gui -G "$Generator" -DSEAMCARVE_BUILD_BENCHMARKS=OFF
           if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
       # GUI-only app: build\seamcarve.exe with its DLLs copied next to it by vcpkg
       - name: Build

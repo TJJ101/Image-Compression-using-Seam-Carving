@@ -49,9 +49,10 @@ namespace {
         int carveWidth;       // images are scaled to this width for Carve
     };
 
-    // The greedy finder goes through a lambda so this compiles both with and without its optional seed parameter.
+    // The DP and greedy finders go through lambdas because their optional parameters (useFullTable, seed) stop them
+    // converting to FindFn.
     const std::vector<Impl> kImpls = {
-        { "dp", Algorithm::DYNAMIC_PROGRAMMING, FindSeamDP, 1024, 256 },
+        { "dp", Algorithm::DYNAMIC_PROGRAMMING, [](const cv::Mat& e) { return FindSeamDP(e); }, 1024, 256 },
         { "greedy", Algorithm::GREEDY, [](const cv::Mat& e) { return FindSeamGreedy(e); }, 1024, 256 },
         { "graphcut", Algorithm::GRAPH_CUT, FindSeamGraphCut, 128, 64 },
     };
