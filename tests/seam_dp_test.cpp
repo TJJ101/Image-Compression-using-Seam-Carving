@@ -51,8 +51,9 @@ namespace {
     */
     double SeamCost(const cv::Mat& energy, const seamcarve::Seam& seam) {
         double total{};
-        for (int row{}; row < energy.rows; ++row) 
+        for (int row{}; row < energy.rows; ++row) {
             total += energy.at<double>(row, seam[row]);
+        }
         return total;
     }
 
@@ -99,8 +100,9 @@ namespace {
     */
     double BruteForceMinimum(const cv::Mat& energy) {
         double best{ std::numeric_limits<double>::infinity() };
-        for (int col{}; col < energy.cols; ++col) 
+        for (int col{}; col < energy.cols; ++col) {
             BruteForce(energy, 0, col, 0.0, best);
+        }
         return best;
     }
 
@@ -135,8 +137,9 @@ namespace {
         cv::Mat example(4, 4, CV_64F);
         const double values[4][4]{ { 5, 3, 4, 6 }, { 2, 8, 1, 5 }, { 7, 2, 6, 3 }, { 4, 5, 1, 9 } };
         for (int row{}; row < 4; ++row) {
-            for (int col{}; col < 4; ++col) 
+            for (int col{}; col < 4; ++col) {
                 example.at<double>(row, col) = values[row][col];
+            }
         }
            
         const seamcarve::Seam exampleSeam{ find(example) };
