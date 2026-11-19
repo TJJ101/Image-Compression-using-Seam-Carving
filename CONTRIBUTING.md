@@ -21,7 +21,7 @@
 
 - The algorithms live in the `seamcarve_core` library and must not depend on the CLI or GUI code. The window
   (`gui.cpp`) and the CLI (`cli.cpp`, `main.cpp`) only call into the library.
-- **Every new `.cpp` file must be added to `CMakeLists.txt`** (algorithm code to `seamcarve_core`, window/CLI code to
+- **Every new `.cpp` and `.hpp` file must be added to `CMakeLists.txt`** (headers too, so they show up in Visual Studio) (algorithm code to `seamcarve_core`, window/CLI code to
   `seamcarve`). The Visual Studio solution is generated, so don't change project settings in Visual Studio itself.
 - New dependencies go in `vcpkg.json` (and the matching `find_package` in `CMakeLists.txt`).
 - Tests go in `tests/CMakeLists.txt`. They run on Linux and in CI, but not in the Windows GUI-only build.
