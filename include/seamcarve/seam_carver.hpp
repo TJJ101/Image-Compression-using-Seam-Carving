@@ -1,4 +1,6 @@
 #pragma once
+#include <atomic>
+#include <stdexcept>
 #include <opencv2/core.hpp>
 #include "seamcarve/types.hpp"
 #include "seamcarve/energy.hpp"
@@ -10,6 +12,16 @@ namespace seamcarve {
         DivideAndConquer divideAndConquerType{ DivideAndConquer::RECURSION };  // only used with EnergyMethod::DIVIDE_AND_CONQUER
         int baseSize{ DEFAULT_BASE_SIZE };  // block size at which divide and conquer stops splitting
         bool verbose{ false };  // print per-seam progress / timing
+
+        // Optional hooks for running Carve() on a background thread (the GUI does this). Both may be
+        // null (the CLI leaves them null). The caller owns them and must keep them alive until Carve() returns.
+        std::atomic<int>* seamsDone{ nullptr };      // Carve() adds 1 after removing each seam (progress bar)
+        const std::atomic<bool>* cancel{ nullptr };  // when set, Carve() stops and throws CarveCancelled
+    };
+
+    /// Thrown by Carve() when CarveOptions::cancel is set while it is running.
+    struct CarveCancelled : std::runtime_error {
+        CarveCancelled() : std::runtime_error{ "Carve cancelled" } {}
     };
 
     /**

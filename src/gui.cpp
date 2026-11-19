@@ -2,16 +2,21 @@
 // This is only the window/UI scaffolding: load an image (type its path or drag and drop it onto the
 // window), pick an algorithm and energy method, choose a target size, press "Carve" and save the result. The seam
 // carving itself lives in the core library; until it is implemented the status bar shows its error.
+// Carving runs on a worker thread (see StartCarve() / CheckCarveThread()) so the window stays responsive.
 #include "seamcarve/gui.hpp"
 #include "seamcarve/gui_theme.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cfloat>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <string>
 #include <system_error>
@@ -59,7 +64,32 @@ namespace seamcarve {
             ImFont* boldFont{};           // bold UI font (headings); the regular one is ImGui's default font
             bool underWsl{ false };       // running under WSL: files dropped from Windows apps never arrive, and
                                           // typed Windows paths (C:\...) are converted to /mnt/c/...
+
+            // Background carve (see StartCarve() / CheckCarveThread()). Only the main thread touches GuiState;
+            // the worker has its own copy of the image and talks back only through the future and the atomics.
+            std::future<cv::Mat> carveJob;          // valid() from StartCarve() until CheckCarveThread() collects the result
+            std::atomic<int> seamsDone{ 0 };        // progress, incremented by the worker
+            std::atomic<bool> cancelCarve{ false }; // set by the Cancel button (or on exit), read by the worker
+            int seamsTotal{};                       // seams the running carve removes
+            std::chrono::steady_clock::time_point carveStart;
         };
+
+        /// True while a carve is running on the worker thread (or its result has not been collected yet).
+        bool IsCarving(const GuiState& state) {
+            return state.carveJob.valid();
+        }
+
+        /**
+        * @brief Formats the time since a point as seconds with two decimals, e.g. "1.23 s".
+        * @param[in] start	- Start time.
+        * @return The formatted elapsed time.
+        */
+        std::string ElapsedSince(std::chrono::steady_clock::time_point start) {
+            const std::chrono::duration<double> elapsed{ std::chrono::steady_clock::now() - start };
+            char text[32];
+            std::snprintf(text, sizeof(text), "%.2f s", elapsed.count());
+            return text;
+        }
 
         /**
         * @brief Checks whether the program runs under WSL (Windows Subsystem for Linux), where
@@ -185,6 +215,37 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Removes the loaded image and its result and puts the window back the way it is at start-up
+        * @param[in,out] state	- UI state to reset.
+        */
+        void RemoveImage(GuiState& state) {
+            if (IsCarving(state)) return;
+
+            const std::string removed{ FileName(state.loadedPath) };
+            if (state.originalTexture != 0) glDeleteTextures(1, &state.originalTexture);
+            if (state.resultTexture != 0) glDeleteTextures(1, &state.resultTexture);
+            state.originalTexture = 0;
+            state.resultTexture = 0;
+
+            const GuiState defaults{};  // start-up values, so each default is only written once (in GuiState)
+            state.original.release();
+            state.result.release();
+            state.pathBuffer[0] = '\0';
+            state.loadedPath.clear();
+            state.algorithmIndex = defaults.algorithmIndex;
+            state.energyIndex = defaults.energyIndex;
+            state.divideAndConquerIndex = defaults.divideAndConquerIndex;
+            state.baseSize = defaults.baseSize;
+            state.targetWidth = defaults.targetWidth;
+            state.targetHeight = defaults.targetHeight;
+            state.scalePercent = defaults.scalePercent;
+            state.keepAspectRatio = defaults.keepAspectRatio;
+            state.fitToWindow = defaults.fitToWindow;
+            state.viewScale = defaults.viewScale;
+            SetStatus(state, "Removed " + removed, false);
+        }
+
+        /**
         * @brief GLFW callback for files dragged and dropped onto the window. It only remembers the
         * first path; the image is loaded later by LoadDroppedImage() in the main loop, so that all
         * loading goes through the same code as the "Load" button.
@@ -211,6 +272,11 @@ namespace seamcarve {
             const int count{ state.droppedCount };
             state.droppedPath.clear();
             state.droppedCount = 0;
+
+            if (IsCarving(state)) {  // the result of the running carve would no longer match the loaded image
+                SetStatus(state, "Wait for the carve to finish (or cancel it) before loading another image", true, path);
+                return;
+            }
 
             if (path.size() >= sizeof(state.pathBuffer)) {
                 SetStatus(state, "Dropped file path is too long (max " + std::to_string(sizeof(state.pathBuffer) - 1) + " characters)", true, path);
@@ -253,17 +319,55 @@ namespace seamcarve {
         * @brief Runs seam carving with the selected algorithm, energy method and target size.
         * @param[in,out] state	- UI state; the result texture and status bar are updated.
         */
-        void RunCarve(GuiState& state) {
+        void StartCarve(GuiState& state) {
+            if (IsCarving(state)) return;
+
             CarveOptions options{};
             options.algorithm = static_cast<Algorithm>(state.algorithmIndex);
+            options.seamsDone = &state.seamsDone;  // state outlives the job: RunGui() waits for it before returning
+            options.cancel = &state.cancelCarve;
+
+            state.seamsDone = 0;
+            state.cancelCarve = false;
+            state.seamsTotal = (state.original.cols - state.targetWidth) + (state.original.rows - state.targetHeight);
+            state.carveStart = std::chrono::steady_clock::now();
             options.energyMethod = static_cast<EnergyMethod>(state.energyIndex);
             options.divideAndConquerType = static_cast<DivideAndConquer>(state.divideAndConquerIndex);
             options.baseSize = EffectiveBaseSize(state);
 
             try {
-                state.result = Carve(state.original, state.targetWidth, state.targetHeight, options);
+                // The worker gets its own copy of the image, so nothing the UI does can change it mid-carve.
+                state.carveJob = std::async(std::launch::async,
+                    [image = state.original.clone(), width = state.targetWidth, height = state.targetHeight, options] {
+                        return Carve(image, width, height, options);
+                    });
+                SetStatus(state, "Carving...", false);
+            } catch (const std::exception& e) {  // std::system_error when no thread can be started
+                SetStatus(state, std::string("Error: cannot start carving: ") + e.what(), true);
+            }
+        }
+
+        /**
+        * @brief Called every frame: if the worker has finished, collects its result (or error) and shows
+        * it. The texture upload happens here because OpenGL may only be used from the main thread.
+        * @param[in,out] state	- UI state; the result texture and status bar are updated.
+        */
+        void CheckCarveThread(GuiState& state) {
+            if (!IsCarving(state) || state.carveJob.wait_for(std::chrono::seconds{ 0 }) != std::future_status::ready) return;
+
+            const std::string elapsed{ ElapsedSince(state.carveStart) };
+            try {
+                cv::Mat result{ state.carveJob.get() };  // rethrows anything Carve() threw; the future becomes invalid
+                if (state.cancelCarve) {  // finished before it noticed the cancel; the user no longer wants it
+                    SetStatus(state, "Carve cancelled", false);
+                    return;
+                }
+                state.result = std::move(result);
                 UploadTexture(state.result, state.resultTexture);
-                SetStatus(state, "Carved to " + std::to_string(state.result.cols) + " \xC3\x97 " + std::to_string(state.result.rows), false);  // UTF-8 multiplication sign
+                SetStatus(state, "Carved to " + std::to_string(state.result.cols) + " \xC3\x97 " + std::to_string(state.result.rows) +  // UTF-8 multiplication sign
+                                 " in " + elapsed, false);
+            } catch (const CarveCancelled&) {
+                SetStatus(state, "Carve cancelled after " + elapsed, false);
             } catch (const std::exception& e) {
                 SetStatus(state, std::string("Error: ") + e.what(), true);
             }
@@ -516,6 +620,25 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Draws the progress of the running carve (seams removed so far, elapsed time) and a
+        * Cancel button, in place of the Carve button.
+        * @param[in,out] state	- UI state; Cancel sets cancelCarve.
+        */
+        void DrawCarveProgress(GuiState& state) {
+            const int done{ state.seamsDone.load() };
+            const float fraction{ state.seamsTotal > 0 ? std::min(1.0f, static_cast<float>(done) / state.seamsTotal) : 0.0f };
+            const std::string label{ std::to_string(done) + " / " + std::to_string(state.seamsTotal) + " seams" };
+            ImGui::ProgressBar(fraction, ImVec2{ -FLT_MIN, ImGui::GetFrameHeight() * theme::primaryButtonHeight }, label.c_str());
+
+            // "###" keeps the same ID when the label changes.
+            const bool cancelling{ state.cancelCarve.load() };
+            ImGui::BeginDisabled(cancelling);
+            if (ImGui::Button(cancelling ? "Cancelling...###cancelCarve" : "Cancel###cancelCarve", ImVec2{ -FLT_MIN, 0.0f })) state.cancelCarve = true;
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Elapsed %s", ElapsedSince(state.carveStart).c_str());
+        }
+
+        /**
         * @brief Draws the energy widgets: the energy method and, for divide and conquer only, its
         * type (recursion / iteration) and block size.
         * @param[in,out] state	- UI state edited by the widgets.
@@ -541,20 +664,31 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Draws the control panel: image path + Load, algorithm, energy, target size, Carve / Save
-        * buttons and view options.
+        * @brief Draws the control panel: image path + Load / Remove, algorithm, energy, target size,
+        * Carve / Save buttons and view options.
         * @param[in,out] state	- UI state edited by the widgets.
         */
         void DrawControls(GuiState& state) {
             ImGui::Begin("Controls");
 
+            const bool carving{ IsCarving(state) };
+            ImGui::BeginDisabled(carving);  // the image and settings of a running carve cannot change
+
             ImGui::SeparatorText("Image");
-            const float loadWidth{ ImGui::CalcTextSize("Load").x + ImGui::GetStyle().FramePadding.x * 2.0f };
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - loadWidth - ImGui::GetStyle().ItemSpacing.x);
+            const bool hasImage{ !state.original.empty() };
+            const ImGuiStyle& style{ ImGui::GetStyle() };
+            const float loadWidth{ ImGui::CalcTextSize("Load").x + style.FramePadding.x * 2.0f };
+            const float removeWidth{ hasImage ? ImGui::CalcTextSize("Remove").x + style.FramePadding.x * 2.0f + style.ItemSpacing.x : 0.0f };
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - loadWidth - style.ItemSpacing.x - removeWidth);
             const bool enterPressed{ ImGui::InputTextWithHint("##path", "Path to an image...", state.pathBuffer, sizeof(state.pathBuffer),
                                                               ImGuiInputTextFlags_EnterReturnsTrue) };
             ImGui::SameLine();
             if (ImGui::Button("Load") || enterPressed) LoadImage(state);
+            if (hasImage) {
+                ImGui::SameLine();
+                if (ImGui::Button("Remove")) RemoveImage(state);
+                ImGui::SetItemTooltip("Remove the image and start over");
+            }
             if (!state.underWsl) ImGui::TextDisabled("or drag and drop an image onto the window");
 
             if (!state.original.empty()) {
@@ -564,13 +698,20 @@ namespace seamcarve {
 
                 DrawEnergyControls(state);
                 DrawSizeControls(state);
+            }
+            ImGui::EndDisabled();
 
+            if (!state.original.empty()) {
                 ImGui::Dummy(ImVec2{ 0.0f, ImGui::GetStyle().ItemSpacing.y * 0.5f });
 
-                // Nothing to carve when the target is the original size.
-                const bool sameSize{ state.targetWidth == state.original.cols && state.targetHeight == state.original.rows };
-                if (PrimaryButton("Carve", !sameSize)) RunCarve(state);
-                if (sameSize) ImGui::SetItemTooltip("Make the width or height smaller first");
+                if (carving) {
+                    DrawCarveProgress(state);
+                } else {
+                    // Nothing to carve when the target is the original size.
+                    const bool sameSize{ state.targetWidth == state.original.cols && state.targetHeight == state.original.rows };
+                    if (PrimaryButton("Carve", !sameSize)) StartCarve(state);
+                    if (sameSize) ImGui::SetItemTooltip("Make the width or height smaller first");
+                }
 
                 if (!state.result.empty()) {
                     if (ImGui::Button("Save result", ImVec2{ -FLT_MIN, 0.0f })) SaveResult(state);
@@ -775,6 +916,7 @@ namespace seamcarve {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             LoadDroppedImage(state);
+            CheckCarveThread(state);
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
@@ -796,6 +938,8 @@ namespace seamcarve {
             glfwSwapBuffers(window);
         }
 
+        state.cancelCarve = true;  // ask a running carve to stop; it is waited for below
+
         if (state.originalTexture != 0) glDeleteTextures(1, &state.originalTexture);
         if (state.resultTexture != 0) glDeleteTextures(1, &state.resultTexture);
 
@@ -804,6 +948,10 @@ namespace seamcarve {
         ImGui::DestroyContext();
         glfwDestroyWindow(window);
         glfwTerminate();
+
+        // The worker uses state.seamsDone / state.cancelCarve, so it must finish before state goes away.
+        // Waiting after the window is gone means the app never looks frozen while the carve stops.
+        if (state.carveJob.valid()) state.carveJob.wait();
         return 0;
     }
 

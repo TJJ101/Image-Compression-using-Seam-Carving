@@ -22,6 +22,7 @@ endif()
 # OpenCV is used ONLY for image I/O, basic matrix storage and (optionally) Sobel.
 # Do NOT use any OpenCV content-aware resizing function (assignment rule).
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+find_package(Threads REQUIRED)  # std::async / std::thread (the GUI carves on a worker thread)
 
 function(seamcarve_set_warnings target)
     if(MSVC)
@@ -47,7 +48,7 @@ add_library(seamcarve_core STATIC
     include/seamcarve/seam_carver.hpp
 )
 target_include_directories(seamcarve_core PUBLIC include)
-target_link_libraries(seamcarve_core PUBLIC ${OpenCV_LIBS})
+target_link_libraries(seamcarve_core PUBLIC ${OpenCV_LIBS} Threads::Threads)
 target_include_directories(seamcarve_core SYSTEM PUBLIC ${OpenCV_INCLUDE_DIRS})
 seamcarve_set_warnings(seamcarve_core)
 
