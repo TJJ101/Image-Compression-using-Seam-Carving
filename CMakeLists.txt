@@ -39,6 +39,12 @@ add_library(seamcarve_core STATIC
     src/seam_greedy.cpp
     src/seam_graphcut.cpp
     src/seam_carver.cpp
+	  src/max_flow.cpp
+    # Headers are listed too so they show up in the Visual Studio solution (CMake only lists files named here).
+    include/seamcarve/types.hpp
+    include/seamcarve/energy.hpp
+    include/seamcarve/seam_finders.hpp
+    include/seamcarve/seam_carver.hpp
 )
 target_include_directories(seamcarve_core PUBLIC include)
 target_link_libraries(seamcarve_core PUBLIC ${OpenCV_LIBS})
@@ -46,7 +52,7 @@ target_include_directories(seamcarve_core SYSTEM PUBLIC ${OpenCV_INCLUDE_DIRS})
 seamcarve_set_warnings(seamcarve_core)
 
 # ---- Executable: CLI, plus the GUI built into the same program -----------------
-add_executable(seamcarve src/main.cpp src/cli.cpp)
+add_executable(seamcarve src/main.cpp src/cli.cpp include/seamcarve/cli.hpp include/seamcarve/gui.hpp)
 target_link_libraries(seamcarve PRIVATE seamcarve_core)
 seamcarve_set_warnings(seamcarve)
 set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT seamcarve)  # F5 runs seamcarve
@@ -61,7 +67,7 @@ if(SEAMCARVE_BUILD_GUI)
     find_package(glfw3 CONFIG REQUIRED)
     find_package(OpenGL REQUIRED)
 
-    target_sources(seamcarve PRIVATE src/gui.cpp)
+    target_sources(seamcarve PRIVATE src/gui.cpp src/gui_theme.cpp)
     target_compile_definitions(seamcarve PRIVATE SEAMCARVE_WITH_GUI)
     target_link_libraries(seamcarve PRIVATE imgui::imgui glfw OpenGL::GL)
 endif()
@@ -79,6 +85,12 @@ if(SEAMCARVE_GUI_ONLY)
         target_link_options(seamcarve PRIVATE /ENTRY:mainCRTStartup)  # keep using main()
     endif()
 endif()
+
+# Show the files in Solution Explorer as folders that mirror the repository (src/, include/seamcarve/).
+foreach(target seamcarve_core seamcarve)
+    get_target_property(target_sources ${target} SOURCES)
+    source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${target_sources})
+endforeach()
 
 # Convenience target that builds the CLI and prints its usage:
 #   cmake --build --preset <preset> --target seamcarve-help

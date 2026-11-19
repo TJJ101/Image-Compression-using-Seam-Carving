@@ -1,10 +1,14 @@
 #pragma once
 #include <opencv2/core.hpp>
 #include "seamcarve/types.hpp"
+#include "seamcarve/energy.hpp"
 
 namespace seamcarve {
     struct CarveOptions {
         Algorithm algorithm { Algorithm::DYNAMIC_PROGRAMMING };
+        EnergyMethod energyMethod{ EnergyMethod::SOBEL };  // how the energy map is computed
+        DivideAndConquer divideAndConquerType{ DivideAndConquer::RECURSION };  // only used with EnergyMethod::DIVIDE_AND_CONQUER
+        int baseSize{ DEFAULT_BASE_SIZE };  // block size at which divide and conquer stops splitting
         bool verbose{ false };  // print per-seam progress / timing
     };
 
@@ -24,7 +28,7 @@ namespace seamcarve {
     * @param[in] image	- Input image.
     * @param[in] targetWidth	- Target width in pixels.
     * @param[in] targetHeight	- Target height in pixels.
-    * @param[in] options	- Algorithm choice and verbosity.
+    * @param[in] options	- Algorithm, energy method and verbosity.
     * @return The resized image.
     */
     cv::Mat Carve(const cv::Mat& image, int targetWidth, int targetHeight, const CarveOptions& options);
