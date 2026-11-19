@@ -66,4 +66,22 @@ namespace seamcarve {
     * @return Single-channel CV_64F matrix, same size as the input.
     */
     cv::Mat ComputeEnergyDivideAndConquerWithIteration(const cv::Mat& image, int baseSize = DEFAULT_BASE_SIZE);
+
+    /**
+    * @brief Brings an energy map up to date after a vertical seam was removed from the image and from the map.
+    * Removing a seam only changes the energy of the pixels within one column of it, so only that band is
+    * recomputed instead of the whole map: the band is cropped out of the image (with one extra column on each
+    * side for the filter to read) and the chosen method's own full-map function runs on the crop
+    * (Sobel with OpenCV's Sobel, Gradient with its finite differences, Divide and conquer with its recursion
+    * or iteration). The result equals a full ComputeEnergy of the image.
+    * @param[in,out] energy	- Energy map (CV_64F) with the seam already removed; fixed in place.
+    * @param[in] image	    - 8-bit BGR image (CV_8UC3) with the seam already removed, same size as energy.
+    * @param[in] seam	    - The removed seam, one column per row of the image before the removal.
+    * @param[in] method	    - Which energy method the map uses.
+    * @param[in] type	    - Recursion or iteration (only for EnergyMethod::DIVIDE_AND_CONQUER).
+    * @param[in] baseSize	- Block size where divide and conquer stops splitting (only for EnergyMethod::DIVIDE_AND_CONQUER).
+    * @throws std::invalid_argument if energy and image differ in size or the seam does not have one entry per row.
+    */
+    void UpdateEnergyAfterSeamRemoval(cv::Mat& energy, const cv::Mat& image, const Seam& seam, EnergyMethod method,
+                                        DivideAndConquer type = DivideAndConquer::RECURSION, int baseSize = DEFAULT_BASE_SIZE);
 }  // namespace seamcarve

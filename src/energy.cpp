@@ -127,4 +127,28 @@ namespace seamcarve {
         }
         return energy;
     }
+
+    void UpdateEnergyAfterSeamRemoval(cv::Mat& energy, const cv::Mat& image, const Seam& seam, EnergyMethod method, 
+        DivideAndConquer type, int baseSize) {
+        if (energy.size() != image.size() || static_cast<int>(seam.size()) != energy.rows)
+            throw std::invalid_argument("UpdateEnergyAfterSeamRemoval: energy, image, and seam sizes do not match");
+
+        // Columns whose energy changed: a pixel's energy depends on its 3x3 neighbourhood, so the pixels just
+        // left of the leftmost seam pixel up to the rightmost seam pixel (after the shift) lost a neighbour.
+        // Using the seam's overall min and max is a safe superset of the per-row band; extra pixels recompute to the same value.
+        const auto [lowest, highest]{ std::minmax_element(seam.begin(), seam.end()) };
+        const int changedFirst{ std::max(*lowest - 1, 0) }, changedLast{ std::min(*highest, energy.cols - 1) };
+
+        // The crop is one column wider on each side so the filter has real neighbours for the changed columns.
+        // At the image border the crop's edge is the image's edge, so the filter treats it exactly as it would in the full image.
+        const int cropFirst{ std::max(changedFirst - 1, 0) }, cropLast{ std::min(changedLast + 1, energy.cols - 1) };
+        const cv::Mat crop(image, cv::Range::all(), cv::Range(cropFirst, cropLast + 1));  // a view, no copy
+
+        // Run the chosen method on the crop, then copy back only the changed columns. The extra edge columns of
+        // the crop are not copied: they lacked a neighbour on the outside, so their values would be wrong.
+        const cv::Mat fresh(ComputeEnergy(crop, method, type, baseSize));
+        fresh.colRange(changedFirst - cropFirst, changedLast - cropFirst + 1)
+            .copyTo(energy.colRange(changedFirst, changedLast + 1));
+    }
+
 }  // namespace seamcarve
