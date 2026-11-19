@@ -6,6 +6,9 @@
 
 namespace seamcarve {
     Seam FindSeamGreedy(const cv::Mat& energy, unsigned seed) {
+        if(energy.empty() || energy.type() != CV_64F)
+            throw std::invalid_argument("FindSeamGreedy: energy must be an non-empty CV_64F matrix");
+
         std::optional<std::mt19937> rng;
 
         Seam s{};
