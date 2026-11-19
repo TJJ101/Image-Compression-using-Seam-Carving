@@ -225,6 +225,31 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Block size range allowed for the loaded image and divide-and-conquer type.
+        * Recursion needs blocks of at least 3 px (its halves overlap by a pixel); iteration works
+        * down to 1. At the image's larger side nothing is split, so the result equals plain Sobel.
+        * (The maximum is kept at least the minimum so the range stays valid for images under 3 px.)
+        * @param[in] state	- UI state (loaded image and divide-and-conquer type).
+        * @return The {minimum, maximum} block size in pixels.
+        */
+        std::pair<int, int> BaseSizeRange(const GuiState& state) {
+            const int minBaseSize{ static_cast<DivideAndConquer>(state.divideAndConquerIndex) == DivideAndConquer::RECURSION ? 3 : 1 };
+            return { minBaseSize, std::max({ state.original.cols, state.original.rows, minBaseSize }) };
+        }
+
+        /**
+        * @brief Block size actually used: the chosen one, limited to BaseSizeRange(). The chosen
+        * value itself is never changed, so it comes back when a larger image or the other type
+        * allows it again.
+        * @param[in] state	- UI state.
+        * @return The block size in pixels.
+        */
+        int EffectiveBaseSize(const GuiState& state) {
+            const auto [minBaseSize, maxBaseSize]{ BaseSizeRange(state) };
+            return std::clamp(state.baseSize, minBaseSize, maxBaseSize);
+        }
+
+        /**
         * @brief Runs seam carving with the selected algorithm, energy method and target size.
         * @param[in,out] state	- UI state; the result texture and status bar are updated.
         */
@@ -233,7 +258,7 @@ namespace seamcarve {
             options.algorithm = static_cast<Algorithm>(state.algorithmIndex);
             options.energyMethod = static_cast<EnergyMethod>(state.energyIndex);
             options.divideAndConquerType = static_cast<DivideAndConquer>(state.divideAndConquerIndex);
-            options.baseSize = state.baseSize;
+            options.baseSize = EffectiveBaseSize(state);
 
             try {
                 state.result = Carve(state.original, state.targetWidth, state.targetHeight, options);
@@ -505,13 +530,13 @@ namespace seamcarve {
 
             ImGui::Combo("Type", &state.divideAndConquerIndex, "Recursion\0Iteration\0");
 
-            // Recursion needs blocks of at least 3 px (its halves overlap by a pixel); iteration works down to 1.
-            const int minBaseSize{ static_cast<DivideAndConquer>(state.divideAndConquerIndex) == DivideAndConquer::RECURSION ? 3 : 1 };
-            // At the image's larger side nothing is split, so the result equals plain Sobel. (Kept at least
-            // minBaseSize so the range stays valid for images smaller than 3 px.)
-            const int maxBaseSize{ std::max({ state.original.cols, state.original.rows, minBaseSize }) };
-            state.baseSize = std::clamp(state.baseSize, minBaseSize, maxBaseSize);
-            ImGui::SliderInt("Block size", &state.baseSize, minBaseSize, maxBaseSize, "%d px", ImGuiSliderFlags_AlwaysClamp);
+            // The slider edits a limited copy, so the chosen size is only changed when the user moves it
+            // (not just because a smaller image or the recursion minimum limits it for now).
+            const auto [minBaseSize, maxBaseSize]{ BaseSizeRange(state) };
+            int shownBaseSize{ EffectiveBaseSize(state) };
+            if (ImGui::SliderInt("Block size", &shownBaseSize, minBaseSize, maxBaseSize, "%d px", ImGuiSliderFlags_AlwaysClamp)) {
+                state.baseSize = shownBaseSize;
+            }
             ImGui::SetItemTooltip("Blocks this size or smaller are computed directly instead of being split");
         }
 
