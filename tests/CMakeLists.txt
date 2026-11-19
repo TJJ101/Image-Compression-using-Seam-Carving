@@ -46,3 +46,12 @@ seamcarve_set_warnings(energy_test)
 set_target_properties(energy_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME energy COMMAND energy_test)
 set_tests_properties(energy PROPERTIES SKIP_RETURN_CODE 77)
+
+# Dynamic programming unit tests: every DP variant is checked against brute force, greedy, bad input
+# and against each other (they must return the same seam).
+add_executable(seam_dp_test seam_dp_test.cpp)
+target_link_libraries(seam_dp_test PRIVATE seamcarve_core)
+seamcarve_set_warnings(seam_dp_test)
+set_target_properties(seam_dp_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME seam_dp COMMAND seam_dp_test)
+set_tests_properties(seam_dp PROPERTIES SKIP_RETURN_CODE 77)
