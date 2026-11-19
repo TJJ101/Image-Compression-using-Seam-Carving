@@ -82,11 +82,12 @@ jobs:
       - name: Configure
         run: |
           $Vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $Year = & $Vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property catalog_productLineVersion
-          $Generator = switch ($Year) {
-            '2026' { 'Visual Studio 18 2026' }
-            '2022' { 'Visual Studio 17 2022' }
-            default { throw "Unsupported Visual Studio version '$Year'" }
+          $Version = & $Vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
+          $Major = $Version.Split('.')[0]
+          $Generator = switch ($Major) {
+            '18' { 'Visual Studio 18 2026' }
+            '17' { 'Visual Studio 17 2022' }
+            default { throw "Unsupported Visual Studio version '$Version'" }
           }
           Write-Host "Using generator '$Generator'"
           # The benchmarks (built and run by the test job) are left out so benchmark.dll does not end up in the zip
