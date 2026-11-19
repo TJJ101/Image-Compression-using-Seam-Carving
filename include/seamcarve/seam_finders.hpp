@@ -19,9 +19,18 @@ namespace seamcarve {
     * @brief Finds a vertical seam using a greedy row-by-row choice.
     * Task 3, implemented in src/seam_greedy.cpp.
     * @param[in] energy	- Energy map (CV_64F).
+    * @param[in] seed	- Randomness seed, for consistency in benchmarking. 0 = random.
     * @return One column index per row.
     */
-    Seam FindSeamGreedy(const cv::Mat& energy);
+    Seam FindSeamGreedy(const cv::Mat& energy, unsigned seed = 0);
+
+    /**
+    * @brief Calls FindSeamsGreedy without setting the seed, while maintaning the same function 
+    *        signature to make it easier to port for testing.
+    * @param[in] energy	- Energy map (CV_64F).
+    * @return One column index per row.
+    */
+    inline Seam FindSeamGreedyDefault(const cv::Mat& energy) { return FindSeamGreedy(energy); }
 
     /**
     * @brief Finds the minimum-energy vertical seam as a minimum s-t cut (max-flow).
