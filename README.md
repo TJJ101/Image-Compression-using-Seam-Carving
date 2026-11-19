@@ -30,9 +30,8 @@ Everything is one program, `seamcarve`, written in C++17 (OpenCV for image I/O, 
 | **Linux / WSL** | Command-line tool when you pass arguments (`make run ARGS="..."`). Opens the GUI when you pass `--gui` or no arguments at all (`make gui`) |
 | **Windows** | GUI only (`build.bat`), built as a Visual Studio 2026 project. There is no command-line mode |
 
-> **Status:** the project skeleton, build system, CLI and a basic GUI window are in place. The algorithms
-> themselves (`energy`, `seam_dp`, `seam_greedy`, `seam_graphcut`, `seam_carver`) are still stubs that report
-> "not implemented".
+> **Status:** the energy methods, all three seam finders (DP, greedy, graph cut) and the carving loop are
+> implemented, so `seamcarve` shrinks images from both the CLI and the GUI.
 
 ## Building on Linux / WSL (make)
 
