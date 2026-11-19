@@ -447,6 +447,7 @@ namespace seamcarve {
 
             if (ImGui::Checkbox("Keep aspect ratio", &state.keepAspectRatio) && state.keepAspectRatio) {
                 state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
+                state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetWidth) / originalWidth);
             }
 
             // Reset, right-aligned on the same row as the checkbox.
@@ -465,13 +466,14 @@ namespace seamcarve {
                 state.targetHeight = ScaleDimension(originalHeight, state.scalePercent / 100.0);
             }
 
-            if (ImGui::SliderInt("Width", &state.targetWidth, 1, originalWidth, "%d px", sliderFlags)) {
-                if (state.keepAspectRatio) state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
+            // With the aspect ratio unlocked, Width and Height are independent and leave Scale % alone.
+            if (ImGui::SliderInt("Width", &state.targetWidth, 1, originalWidth, "%d px", sliderFlags) && state.keepAspectRatio) {
+                state.targetHeight = ScaleDimension(originalHeight, static_cast<double>(state.targetWidth) / originalWidth);
                 state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetWidth) / originalWidth);
             }
 
-            if (ImGui::SliderInt("Height", &state.targetHeight, 1, originalHeight, "%d px", sliderFlags)) {
-                if (state.keepAspectRatio) state.targetWidth = ScaleDimension(originalWidth, static_cast<double>(state.targetHeight) / originalHeight);
+            if (ImGui::SliderInt("Height", &state.targetHeight, 1, originalHeight, "%d px", sliderFlags) && state.keepAspectRatio) {
+                state.targetWidth = ScaleDimension(originalWidth, static_cast<double>(state.targetHeight) / originalHeight);
                 state.scalePercent = ScaleDimension(100, static_cast<double>(state.targetHeight) / originalHeight);
             }
 
