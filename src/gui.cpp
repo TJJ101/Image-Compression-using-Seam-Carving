@@ -215,6 +215,37 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Removes the loaded image and its result and puts the window back the way it is at start-up
+        * @param[in,out] state	- UI state to reset.
+        */
+        void RemoveImage(GuiState& state) {
+            if (IsCarving(state)) return;
+
+            const std::string removed{ FileName(state.loadedPath) };
+            if (state.originalTexture != 0) glDeleteTextures(1, &state.originalTexture);
+            if (state.resultTexture != 0) glDeleteTextures(1, &state.resultTexture);
+            state.originalTexture = 0;
+            state.resultTexture = 0;
+
+            const GuiState defaults{};  // start-up values, so each default is only written once (in GuiState)
+            state.original.release();
+            state.result.release();
+            state.pathBuffer[0] = '\0';
+            state.loadedPath.clear();
+            state.algorithmIndex = defaults.algorithmIndex;
+            state.energyIndex = defaults.energyIndex;
+            state.divideAndConquerIndex = defaults.divideAndConquerIndex;
+            state.baseSize = defaults.baseSize;
+            state.targetWidth = defaults.targetWidth;
+            state.targetHeight = defaults.targetHeight;
+            state.scalePercent = defaults.scalePercent;
+            state.keepAspectRatio = defaults.keepAspectRatio;
+            state.fitToWindow = defaults.fitToWindow;
+            state.viewScale = defaults.viewScale;
+            SetStatus(state, "Removed " + removed, false);
+        }
+
+        /**
         * @brief GLFW callback for files dragged and dropped onto the window. It only remembers the
         * first path; the image is loaded later by LoadDroppedImage() in the main loop, so that all
         * loading goes through the same code as the "Load" button.
@@ -633,8 +664,8 @@ namespace seamcarve {
         }
 
         /**
-        * @brief Draws the control panel: image path + Load, algorithm, energy, target size, Carve / Save
-        * buttons and view options.
+        * @brief Draws the control panel: image path + Load / Remove, algorithm, energy, target size,
+        * Carve / Save buttons and view options.
         * @param[in,out] state	- UI state edited by the widgets.
         */
         void DrawControls(GuiState& state) {
@@ -644,12 +675,20 @@ namespace seamcarve {
             ImGui::BeginDisabled(carving);  // the image and settings of a running carve cannot change
 
             ImGui::SeparatorText("Image");
-            const float loadWidth{ ImGui::CalcTextSize("Load").x + ImGui::GetStyle().FramePadding.x * 2.0f };
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - loadWidth - ImGui::GetStyle().ItemSpacing.x);
+            const bool hasImage{ !state.original.empty() };
+            const ImGuiStyle& style{ ImGui::GetStyle() };
+            const float loadWidth{ ImGui::CalcTextSize("Load").x + style.FramePadding.x * 2.0f };
+            const float removeWidth{ hasImage ? ImGui::CalcTextSize("Remove").x + style.FramePadding.x * 2.0f + style.ItemSpacing.x : 0.0f };
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - loadWidth - style.ItemSpacing.x - removeWidth);
             const bool enterPressed{ ImGui::InputTextWithHint("##path", "Path to an image...", state.pathBuffer, sizeof(state.pathBuffer),
                                                               ImGuiInputTextFlags_EnterReturnsTrue) };
             ImGui::SameLine();
             if (ImGui::Button("Load") || enterPressed) LoadImage(state);
+            if (hasImage) {
+                ImGui::SameLine();
+                if (ImGui::Button("Remove")) RemoveImage(state);
+                ImGui::SetItemTooltip("Remove the image and start over");
+            }
             if (!state.underWsl) ImGui::TextDisabled("or drag and drop an image onto the window");
 
             if (!state.original.empty()) {
