@@ -31,15 +31,20 @@ namespace seamcarve {
         * The energy is recomputed after every seam, because removing one changes the pixels next to it.
         * @param[in] image      - 8-bit BGR image (CV_8UC3).
         * @param[in] targetWidth        - Width to stop at, not larger than image.cols.
-        * @param[in] options    - Algorithm and energy method.
+        * @param[in] options    - Algorithm, energy method and the optional progress / cancel hooks.
         * @return A new image targetWidth pixels wide. The input is not modified.
+        * @throws CarveCancelled If options.cancel is set while carving.
         */
         cv::Mat CarveWidth(const cv::Mat& image, int targetWidth, const CarveOptions& options){
             cv::Mat current = image.clone(); // Make a copy of the input image to avoid modifying it directly
             while(current.cols > targetWidth){
+                if (options.cancel && options.cancel->load()) throw CarveCancelled{};  // GUI Cancel button
+
                 const cv::Mat energy = ComputeEnergy(current, options.energyMethod, options.divideAndConquerType, options.baseSize);
                 const Seam seam = FindSeam(energy, options.algorithm);
                 current = RemoveSeam(current, seam, Orientation::VERTICAL);
+
+                if (options.seamsDone) ++*options.seamsDone;  // GUI progress bar
             }
             return current;
         }
