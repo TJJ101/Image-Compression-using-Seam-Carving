@@ -112,9 +112,9 @@ namespace {
     * @return The index to read instead.
     */
     int ReflectIndex(int index, int size) {
-        if (size == 1) return 0;
-        if (index < 0) return -index;
-        if (index >= size) return 2 * size - 2 - index;
+        if (size == 1)      return 0;
+        if (index < 0)      return -index;
+        if (index >= size)  return 2 * size - 2 - index;
         return index;
     }
 
@@ -194,15 +194,13 @@ namespace {
         // Also on a random image, where dx and dy are both non-zero (the vertical edge image has dy = 0).
         double energyMin{}, energyMax{};
         cv::minMaxLoc(energy, &energyMin, &energyMax);
-        Check(energyMin >= 0.0, name, "energy must not be negative on a random image either (smallest value: "
-                                      + std::to_string(energyMin) + ")");
+        Check(energyMin >= 0.0, name, "energy must not be negative on a random image either (smallest value: " + std::to_string(energyMin) + ")");
 
         cv::Mat brighter;
         gray.convertTo(brighter, CV_8U, 1.0, 50.0);  // values stay below 250, so nothing saturates
         const cv::Mat brighterEnergy(computeEnergy(GrayToBgr(brighter)));
         if (HasExpectedShape(brighterEnergy, rows, cols, name)) {
-            Check(cv::norm(energy, brighterEnergy, cv::NORM_INF) <= TOLERANCE, name,
-                  "adding a constant to every pixel must not change the energy");
+            Check(cv::norm(energy, brighterEnergy, cv::NORM_INF) <= TOLERANCE, name, "adding a constant to every pixel must not change the energy");
         }
 
         cv::Mat mirrored, expectedMirrored;
@@ -210,8 +208,7 @@ namespace {
         cv::flip(energy, expectedMirrored, 1);
         const cv::Mat mirroredEnergy(computeEnergy(GrayToBgr(mirrored)));
         if (HasExpectedShape(mirroredEnergy, rows, cols, name)) {
-            Check(cv::norm(mirroredEnergy, expectedMirrored, cv::NORM_INF) <= TOLERANCE, name,
-                  "the energy of a mirrored image must be the mirrored energy");
+            Check(cv::norm(mirroredEnergy, expectedMirrored, cv::NORM_INF) <= TOLERANCE, name, "the energy of a mirrored image must be the mirrored energy");
         }
 
         cv::Mat transposed, expectedTransposed;
@@ -219,8 +216,7 @@ namespace {
         cv::transpose(energy, expectedTransposed);
         const cv::Mat transposedEnergy(computeEnergy(GrayToBgr(transposed)));
         if (HasExpectedShape(transposedEnergy, cols, rows, name)) {
-            Check(cv::norm(transposedEnergy, expectedTransposed, cv::NORM_INF) <= TOLERANCE, name,
-                  "the energy of a transposed image must be the transposed energy (are dx and dy both used?)");
+            Check(cv::norm(transposedEnergy, expectedTransposed, cv::NORM_INF) <= TOLERANCE, name, "the energy of a transposed image must be the transposed energy (are dx and dy both used?)");
         }
     }
 
@@ -236,19 +232,23 @@ namespace {
         //   dx = (2 * 10) * (1 + 2 + 1) = 80 and dy = (2 * 20) * (1 + 2 + 1) = 160,
         // so |dx| + |dy| = 240 for every interior pixel.
         cv::Mat ramp(5, 5, CV_8UC1);
-        for (int row{}; row < ramp.rows; ++row)
-            for (int col{}; col < ramp.cols; ++col)
+        for (int row{}; row < ramp.rows; ++row) {
+            for (int col{}; col < ramp.cols; ++col) {
                 ramp.at<uchar>(row, col) = static_cast<uchar>(10 * col + 20 * row);
+            }
+        }
 
         const cv::Mat rampEnergy(computeEnergy(GrayToBgr(ramp)));
         if (!HasExpectedShape(rampEnergy, 5, 5, name)) return;
 
         bool rampOk{ true };
-        for (int row{ 1 }; row <= 3; ++row)
-            for (int col{ 1 }; col <= 3; ++col)
-                if (std::abs(rampEnergy.at<double>(row, col) - 240.0) > TOLERANCE) rampOk = false;
-        Check(rampOk, name, "on the ramp image every interior pixel must be |dx| + |dy| = 80 + 160 = 240 (got "
-                            + std::to_string(rampEnergy.at<double>(2, 2)) + " at row 2, col 2)");
+        for (int row{ 1 }; row <= 3; ++row) {
+            for (int col{ 1 }; col <= 3; ++col) {
+                if (std::abs(rampEnergy.at<double>(row, col) - 240.0) > TOLERANCE) 
+                    rampOk = false;
+            }
+        }
+        Check(rampOk, name, "on the ramp image every interior pixel must be |dx| + |dy| = 80 + 160 = 240 (got " + std::to_string(rampEnergy.at<double>(2, 2)) + " at row 2, col 2)");
 
         // Every pixel, including the borders, against the independent reference.
         const std::vector<std::pair<int, int>> shapes{ { 16, 16 }, { 13, 21 }, { 21, 13 }, { 3, 3 }, { 2, 5 } };
@@ -268,7 +268,8 @@ namespace {
             Check(largest <= TOLERANCE, name,
                   "on a random " + size + " image the energy differs from the reference at row " + std::to_string(where.y)
                   + ", col " + std::to_string(where.x) + ": expected " + std::to_string(expected.at<double>(where))
-                  + ", got " + std::to_string(actual.at<double>(where)));
+                  + ", got " + std::to_string(actual.at<double>(where))
+            );
         }
     }
 
