@@ -16,11 +16,15 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -35,6 +39,10 @@
 
 namespace seamcarve {
     namespace {
+        constexpr std::chrono::milliseconds PREVIEW_INTERVAL{ 33 };  // without a delay, at most one preview frame per this long (about 30 per second)
+        constexpr int PREVIEW_SEAM_THICKNESS{ 2 };                   // width in pixels of the red seam in previews and steps
+        const cv::Scalar PREVIEW_SEAM_COLOUR{ 0, 0, 255 };           // BGR red
+
         /// Everything the UI needs to remember between frames.
         struct GuiState {
             cv::Mat original;
@@ -72,11 +80,48 @@ namespace seamcarve {
             std::atomic<bool> cancelCarve{ false }; // set by the Cancel button (or on exit), read by the worker
             int seamsTotal{};                       // seams the running carve removes
             std::chrono::steady_clock::time_point carveStart;
+
+            // Step-by-step view (see StartCarve()). While carving, the worker leaves preview frames in `preview` and
+            // the main thread takes them in PollPreview(). seamSteps and seamOverlay are written by the worker and are
+            // only read after the job has finished.
+            struct PreviewSlot {
+                std::mutex mutex;
+                cv::Mat frame;        // newest frame made by the worker
+                bool fresh{ false };  // true until the main thread has taken it
+            };
+            bool showEachSeam{ true };          // show the image and the next seam while carving (otherwise only the final result)
+            std::atomic<int> seamDelayMs{ 0 };  // pause after each shown seam so it can be followed; read by the worker, so it can change while carving
+            PreviewSlot preview;
+            cv::Mat shownFrame;                 // what the Result panel shows instead of `result` (a preview or a chosen step); empty = show `result`
+            std::vector<SeamStep> seamSteps;    // every seam of the last carve, in order (for the step slider and the overlay)
+            cv::Mat seamOverlay;                // the original with every removed seam coloured by order
+            GLuint overlayTexture{};
+            bool showSeams{ false };            // the Original panel shows seamOverlay
+            int scrubStep{};                    // seams removed in the step the slider shows (seamSteps.size() = the final result)
         };
 
         /// True while a carve is running on the worker thread (or its result has not been collected yet).
         bool IsCarving(const GuiState& state) {
             return state.carveJob.valid();
+        }
+
+        /// The image the Result panel draws: the preview or chosen step while there is one, otherwise the carved result.
+        const cv::Mat& ResultShown(const GuiState& state) {
+            return state.shownFrame.empty() ? state.result : state.shownFrame;
+        }
+
+        /**
+        * @brief Forgets everything a carve produced: the result, the seam steps, the overlay and anything shown
+        * in place of the result. Not for use while a carve is running (the worker writes some of these).
+        * @param[in,out] state	- UI state to clear.
+        */
+        void ClearCarveOutput(GuiState& state) {
+            state.result.release();
+            state.shownFrame.release();
+            state.seamSteps.clear();
+            state.seamOverlay.release();
+            state.showSeams = false;
+            state.scrubStep = 0;
         }
 
         /**
@@ -205,7 +250,7 @@ namespace seamcarve {
             }
 
             state.original = image;
-            state.result.release();
+            ClearCarveOutput(state);
             state.loadedPath = path;
             state.targetWidth = image.cols;
             state.targetHeight = image.rows;
@@ -224,12 +269,15 @@ namespace seamcarve {
             const std::string removed{ FileName(state.loadedPath) };
             if (state.originalTexture != 0) glDeleteTextures(1, &state.originalTexture);
             if (state.resultTexture != 0) glDeleteTextures(1, &state.resultTexture);
+        if (state.overlayTexture != 0) glDeleteTextures(1, &state.overlayTexture);
+    if (state.overlayTexture != 0) glDeleteTextures(1, &state.overlayTexture);
             state.originalTexture = 0;
             state.resultTexture = 0;
+            state.overlayTexture = 0;
 
             const GuiState defaults{};  // start-up values, so each default is only written once (in GuiState)
             state.original.release();
-            state.result.release();
+            ClearCarveOutput(state);
             state.pathBuffer[0] = '\0';
             state.loadedPath.clear();
             state.algorithmIndex = defaults.algorithmIndex;
@@ -242,6 +290,8 @@ namespace seamcarve {
             state.keepAspectRatio = defaults.keepAspectRatio;
             state.fitToWindow = defaults.fitToWindow;
             state.viewScale = defaults.viewScale;
+            state.showEachSeam = defaults.showEachSeam;
+            state.seamDelayMs = defaults.seamDelayMs.load();
             SetStatus(state, "Removed " + removed, false);
         }
 
@@ -316,6 +366,75 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Makes the hook that shows each seam while carving. It runs on the worker thread: it copies the image
+        * the seam was found in, paints the seam on the copy and leaves it in the preview slot for the main thread
+        * (see PollPreview()). Without a delay at most one frame per PREVIEW_INTERVAL is made, so the preview costs
+        * the carve almost nothing; with a delay every seam is shown and the worker waits after each one.
+        * @param[in,out] state	- UI state; it must outlive the carve (RunGui() waits for the worker before returning).
+        * @return The hook for CarveOptions::onSeamFound.
+        */
+        std::function<void(const cv::Mat&, const Seam&, Orientation)> MakePreviewHook(GuiState& state) {
+            using Clock = std::chrono::steady_clock;
+            return [&state, lastShown = Clock::time_point{}](const cv::Mat& image, const Seam& seam, Orientation orientation) mutable {
+                const int delayMs{ state.seamDelayMs.load() };
+                const Clock::time_point now{ Clock::now() };
+                if (delayMs == 0 && now - lastShown < PREVIEW_INTERVAL) return;
+                lastShown = now;
+
+                // Copy first: `image` is the worker's own buffer and changes as soon as this returns. In the height
+                // pass it is the transposed image, and transposing it gives the image the user sees.
+                cv::Mat frame;
+                if (orientation == Orientation::HORIZONTAL) cv::transpose(image, frame);
+                else frame = image.clone();
+                PaintSeam(frame, seam, orientation, PREVIEW_SEAM_COLOUR, PREVIEW_SEAM_THICKNESS);
+
+                {
+                    std::lock_guard<std::mutex> lock{ state.preview.mutex };  // only the hand-over is locked; the frame was made outside
+                    state.preview.frame = std::move(frame);
+                    state.preview.fresh = true;
+                }
+
+                // Wait in short slices so the Cancel button still reacts quickly.
+                for (int waited{}; waited < delayMs && !state.cancelCarve.load(); waited += 10)
+                    std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+            };
+        }
+
+        /**
+        * @brief Called every frame while carving: takes the newest preview frame the worker made (if any) and
+        * uploads it as the Result texture. The upload happens here because OpenGL may only be used from the main thread.
+        * @param[in,out] state	- UI state; shownFrame and the result texture are updated.
+        */
+        void PollPreview(GuiState& state) {
+            if (!IsCarving(state)) return;
+            {
+                std::lock_guard<std::mutex> lock{ state.preview.mutex };
+                if (!state.preview.fresh) return;
+                std::swap(state.shownFrame, state.preview.frame);  // swap, not copy: the lock is held only for a moment
+                state.preview.fresh = false;
+            }
+            UploadTexture(state.shownFrame, state.resultTexture);
+        }
+
+        /**
+        * @brief Shows the carve as it was after some of its seams (the step slider): the next seam to be removed is
+        * painted red. The last step is the final result.
+        * @param[in,out] state	- UI state; shownFrame, scrubStep and the result texture are updated. Needs a finished carve.
+        * @param[in] step	- Number of seams already removed, clamped to [0, number of seams].
+        */
+        void ShowStep(GuiState& state, int step) {
+            const int total{ static_cast<int>(state.seamSteps.size()) };
+            state.scrubStep = std::clamp(step, 0, total);
+            if (state.scrubStep == total) {
+                state.shownFrame.release();
+                UploadTexture(state.result, state.resultTexture);
+            } else {
+                state.shownFrame = RenderCarveStep(state.original, state.seamSteps, state.scrubStep, PREVIEW_SEAM_THICKNESS);
+                UploadTexture(state.shownFrame, state.resultTexture);
+            }
+        }
+
+        /**
         * @brief Runs seam carving with the selected algorithm, energy method and target size.
         * @param[in,out] state	- UI state; the result texture and status bar are updated.
         */
@@ -335,11 +454,28 @@ namespace seamcarve {
             options.divideAndConquerType = static_cast<DivideAndConquer>(state.divideAndConquerIndex);
             options.baseSize = EffectiveBaseSize(state);
 
+            // Forget the previous carve's steps and overlay; the preview starts empty.
+            state.shownFrame.release();
+            state.seamSteps.clear();
+            state.seamOverlay.release();
+            state.showSeams = false;
+            state.scrubStep = 0;
+            {
+                std::lock_guard<std::mutex> lock{ state.preview.mutex };
+                state.preview.frame.release();
+                state.preview.fresh = false;
+            }
+            options.seamLog = &state.seamSteps;  // the worker fills it; the main thread reads it only after the job has finished
+            if (state.showEachSeam) options.onSeamFound = MakePreviewHook(state);
+
             try {
                 // The worker gets its own copy of the image, so nothing the UI does can change it mid-carve.
                 state.carveJob = std::async(std::launch::async,
-                    [image = state.original.clone(), width = state.targetWidth, height = state.targetHeight, options] {
-                        return Carve(image, width, height, options);
+                    [image = state.original.clone(), width = state.targetWidth, height = state.targetHeight, options, &overlay = state.seamOverlay] {
+                        cv::Mat result{ Carve(image, width, height, options) };
+                        // Prepare the "show removed seams" picture here, off the UI thread: replaying the seams takes a moment on big images.
+                        overlay = RenderSeamOverlay(image, BuildRemovalMap(image.size(), *options.seamLog), static_cast<int>(options.seamLog->size()));
+                        return result;
                     });
                 SetStatus(state, "Carving...", false);
             } catch (const std::exception& e) {  // std::system_error when no thread can be started
@@ -356,19 +492,34 @@ namespace seamcarve {
             if (!IsCarving(state) || state.carveJob.wait_for(std::chrono::seconds{ 0 }) != std::future_status::ready) return;
 
             const std::string elapsed{ ElapsedSince(state.carveStart) };
+
+            // A carve that did not finish leaves no steps and no overlay, and the Result panel goes back to the previous result (if any).
+            const auto discardSteps{ [&state] {
+                state.shownFrame.release();
+                state.seamSteps.clear();
+                state.seamOverlay.release();
+                if (!state.result.empty()) UploadTexture(state.result, state.resultTexture);
+            } };
+
             try {
                 cv::Mat result{ state.carveJob.get() };  // rethrows anything Carve() threw; the future becomes invalid
                 if (state.cancelCarve) {  // finished before it noticed the cancel; the user no longer wants it
+                    discardSteps();
                     SetStatus(state, "Carve cancelled", false);
                     return;
                 }
                 state.result = std::move(result);
+                state.shownFrame.release();  // the last preview frame gives way to the real result
                 UploadTexture(state.result, state.resultTexture);
+                if (!state.seamOverlay.empty()) UploadTexture(state.seamOverlay, state.overlayTexture);
+                state.scrubStep = static_cast<int>(state.seamSteps.size());
                 SetStatus(state, "Carved to " + std::to_string(state.result.cols) + " \xC3\x97 " + std::to_string(state.result.rows) +  // UTF-8 multiplication sign
                                  " in " + elapsed, false);
             } catch (const CarveCancelled&) {
+                discardSteps();
                 SetStatus(state, "Carve cancelled after " + elapsed, false);
             } catch (const std::exception& e) {
+                discardSteps();
                 SetStatus(state, std::string("Error: ") + e.what(), true);
             }
         }
@@ -664,6 +815,46 @@ namespace seamcarve {
         }
 
         /**
+        * @brief Draws the preview options: whether each seam is shown while carving and how long to wait after
+        * each one. The tick box is locked while carving; the delay can be changed during the carve.
+        * @param[in,out] state	- UI state edited by the widgets.
+        */
+        void DrawPreviewControls(GuiState& state) {
+            ImGui::SeparatorText("Preview");
+            ImGui::BeginDisabled(IsCarving(state));
+            ImGui::Checkbox("Show each seam while carving", &state.showEachSeam);
+            ImGui::SetItemTooltip("Shows the image shrinking, with the next seam to be removed in red");
+            ImGui::EndDisabled();
+
+            if (!state.showEachSeam) return;
+            int delayMs{ state.seamDelayMs.load() };
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderInt("##seamDelay", &delayMs, 0, 500, "%d ms between seams", ImGuiSliderFlags_AlwaysClamp)) state.seamDelayMs = delayMs;
+            ImGui::SetItemTooltip("Slows the carve down so each seam can be followed (0 = as fast as possible)");
+        }
+
+        /**
+        * @brief Draws the step slider: scrub through the finished carve, one seam at a time. The next seam to be
+        * removed is painted red on the picture; the last step is the final result.
+        * @param[in,out] state	- UI state; ShowStep() updates the Result panel.
+        */
+        void DrawStepControls(GuiState& state) {
+            const int total{ static_cast<int>(state.seamSteps.size()) };
+            ImGui::SeparatorText("Steps");
+
+            int step{ state.scrubStep };
+            if (ImGui::ArrowButton("##stepBack", ImGuiDir_Left) && step > 0) ShowStep(state, step - 1);
+            ImGui::SetItemTooltip("One seam back");
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##stepForward", ImGuiDir_Right) && step < total) ShowStep(state, step + 1);
+            ImGui::SetItemTooltip("One seam forward");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderInt("##step", &step, 0, total, "%d seams removed", ImGuiSliderFlags_AlwaysClamp)) ShowStep(state, step);
+            ImGui::SetItemTooltip("Drag to see the image after that many seams (%d in total)", total);
+        }
+
+        /**
         * @brief Draws the control panel: image path + Load / Remove, algorithm, energy, target size,
         * Carve / Save buttons and view options.
         * @param[in,out] state	- UI state edited by the widgets.
@@ -702,6 +893,7 @@ namespace seamcarve {
             ImGui::EndDisabled();
 
             if (!state.original.empty()) {
+                DrawPreviewControls(state);
                 ImGui::Dummy(ImVec2{ 0.0f, ImGui::GetStyle().ItemSpacing.y * 0.5f });
 
                 if (carving) {
@@ -718,8 +910,15 @@ namespace seamcarve {
                     ImGui::SetItemTooltip("Saves %s", MakeResultPath(state.loadedPath, state.result.cols, state.result.rows).c_str());
                 }
 
+                // The worker writes the seam list and the overlay at the end of a carve, so they are only read when none is running.
+                if (!carving && !state.result.empty() && !state.seamSteps.empty()) DrawStepControls(state);
+
                 ImGui::SeparatorText("View");
                 ImGui::Checkbox("Fit images to window", &state.fitToWindow);
+                ImGui::BeginDisabled(carving || state.seamOverlay.empty());
+                ImGui::Checkbox("Show removed seams on the original", &state.showSeams);
+                ImGui::SetItemTooltip("Colours every removed seam on the original, from blue (first) to red (last)");
+                ImGui::EndDisabled();
             }
 
             ImGui::End();
@@ -757,9 +956,11 @@ namespace seamcarve {
         */
         void DrawImages(GuiState& state) {
             state.viewScale = 1.0f;
+            const cv::Mat& shown{ ResultShown(state) };                                       // the preview / chosen step, or the result
+            const bool showOverlay{ state.showSeams && !IsCarving(state) && !state.seamOverlay.empty() };  // not while the worker may still be writing it
             if (state.fitToWindow && !state.original.empty()) {
                 float scale{ FitScale(state.original, state.originalPanelSize) };
-                if (!state.result.empty()) scale = std::min(scale, FitScale(state.result, state.resultPanelSize));
+                if (!shown.empty()) scale = std::min(scale, FitScale(shown, state.resultPanelSize));
                 if (scale < 1.0e6f) state.viewScale = scale;
             }
 
@@ -768,13 +969,14 @@ namespace seamcarve {
             if (ImGui::Begin("Original", nullptr, flags)) {
                 state.originalPanelSize = ImGui::GetContentRegionAvail();
                 if (state.original.empty()) DrawDropZone(state);
+                else if (showOverlay) DrawScaledImage(state.seamOverlay, state.overlayTexture, state.viewScale);
                 else DrawScaledImage(state.original, state.originalTexture, state.viewScale);
             }
             ImGui::End();
 
             if (ImGui::Begin("Result", nullptr, flags)) {
                 state.resultPanelSize = ImGui::GetContentRegionAvail();
-                if (!state.result.empty()) DrawScaledImage(state.result, state.resultTexture, state.viewScale);
+                if (!shown.empty()) DrawScaledImage(shown, state.resultTexture, state.viewScale);
                 else if (state.original.empty()) DrawPanelHint("The carved image will appear here");
                 else DrawPanelHint("Set a target size and press Carve");
             }
@@ -916,6 +1118,7 @@ namespace seamcarve {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             LoadDroppedImage(state);
+            PollPreview(state);  // before CheckCarveThread(): the final result replaces the last preview frame
             CheckCarveThread(state);
 
             ImGui_ImplOpenGL3_NewFrame();
