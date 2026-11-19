@@ -55,3 +55,10 @@ seamcarve_set_warnings(seam_dp_test)
 set_target_properties(seam_dp_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME seam_dp COMMAND seam_dp_test)
 set_tests_properties(seam_dp PROPERTIES SKIP_RETURN_CODE 77)
+
+# Seam carver unit tests: RemoveSeam and Carve with every algorithm and energy method.
+add_executable(seam_carver_test seam_carver_test.cpp)
+target_link_libraries(seam_carver_test PRIVATE seamcarve_core)
+seamcarve_set_warnings(seam_carver_test)
+set_target_properties(seam_carver_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME seam_carver COMMAND seam_carver_test)
