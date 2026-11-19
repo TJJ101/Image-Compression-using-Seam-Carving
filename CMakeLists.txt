@@ -39,6 +39,7 @@ add_library(seamcarve_core STATIC
     src/seam_greedy.cpp
     src/seam_graphcut.cpp
     src/seam_carver.cpp
+	  src/max_flow.cpp
     # Headers are listed too so they show up in the Visual Studio solution (CMake only lists files named here).
     include/seamcarve/types.hpp
     include/seamcarve/energy.hpp
