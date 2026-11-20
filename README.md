@@ -16,7 +16,7 @@ As part of a group assignment, we implemented Seam carving using 3 different met
   </tr>
   <tr>
     <td>Presentation Video</td>
-    <td>[Youtube](https://youtu.be/PYXidnjJpSY)</td>
+    <td><a href="https://youtu.be/PYXidnjJpSY">Watch on YouTube</a></td>
   </tr>
 </table>
 
