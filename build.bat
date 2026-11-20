@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 rem Windows build script. Generates a Visual Studio 2026 project with CMake and builds it into the
-rem GUI-only app build\seamcarve.exe (no command-line mode).
+rem GUI-only app build\seamcarve.exe (no command-line mode) and the benchmark suite build\seamcarve_bench.exe.
 rem Usage: build.bat [build ^| run ^| open ^| clean ^| help]
 rem Needs: git and Visual Studio 2026 with the "Desktop development with C++" workload.
 cd /d "%~dp0"
@@ -32,6 +32,7 @@ set "PRESET=windows-gui"
 set "BUILD_DIR=build\cmake-windows"
 set "SLN=%BUILD_DIR%\SeamCarve.sln"
 set "EXE=build\seamcarve.exe"
+set "BENCH_EXE=build\seamcarve_bench.exe"
 
 rem Ignore the vcpkg that ships inside Visual Studio (a VS developer prompt points VCPKG_ROOT at it).
 if defined VCPKG_ROOT echo %VCPKG_ROOT% | find /i "Microsoft Visual Studio" >nul && set "VCPKG_ROOT="
@@ -61,7 +62,7 @@ exit /b 0
 :build
 call :ensure_built || exit /b 1
 echo.
-echo Built %EXE%
+echo Built %EXE% and %BENCH_EXE%
 echo Visual Studio project: %SLN%
 exit /b 0
 
@@ -90,7 +91,7 @@ rem ---------------------------------------------------------------------------
 :show_help
 echo Usage: build.bat [command]
 echo.
-echo   build   Generate the Visual Studio project and build build\seamcarve.exe (default)
+echo   build   Generate the Visual Studio project and build seamcarve.exe and seamcarve_bench.exe (default)
 echo   run     Build if needed, then open the app (an image path may follow)
 echo   open    Generate the project if needed, then open it in Visual Studio
 echo   clean   Delete the Windows build output and the repo-local vcpkg-win
@@ -114,7 +115,7 @@ echo [3/3] Generating the Visual Studio project (the first time this builds Open
 "%CMAKE_EXE%" --preset %PRESET% || exit /b 1
 exit /b 0
 
-rem Build the generated Visual Studio project (MSBuild) into build\seamcarve.exe.
+rem Build the generated Visual Studio project (MSBuild) into build\seamcarve.exe and build\seamcarve_bench.exe.
 :ensure_built
 call :ensure_configured || exit /b 1
 echo Building...

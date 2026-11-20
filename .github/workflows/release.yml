@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  push:
+    # Trigger on tag pushes (e.g., v1.0.0, v1.2, 1.0)
+    tags:
+      - 'v*.*.*'
+      - '*.*.*'
+      - 'v*'
+  # Manual run from the Actions tab: tests and builds the zip (as a run artifact) but makes no release
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: self-hosted
+    name: Run Tests
+    env:
+      REPORT_PATH: '${{ github.workspace }}\TestReports' # Where the CTest JUnit report is written
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      # Must come after checkout (the action lives in this repo). Sets VCPKG_ROOT for the steps below.
+      - name: Set up vcpkg
+        uses: ./.github/actions/setup-vcpkg
+      # The tests drive the CLI, so they use the "vcpkg" preset (CLI + GUI), not the GUI-only release build
+      - name: Configure
+        run: cmake --preset vcpkg
+      # Also builds seamcarve_bench, the benchmark suite run after the tests
+      - name: Build
+        run: cmake --build --preset vcpkg
+      - name: Run Tests
+        run: |
+          if (Test-Path "$env:REPORT_PATH") { Remove-Item -Recurse -Force "$env:REPORT_PATH" }
+          New-Item -ItemType Directory -Force "$env:REPORT_PATH" | Out-Null
+          $Junit = Join-Path $env:REPORT_PATH 'ctest.xml'
+          ctest --preset vcpkg --output-junit "$Junit"
+          $CtestExit = $LASTEXITCODE
+          if (-not (Test-Path $Junit)) { throw "No test report was written to $Junit" }
+          # Write the results as a table on the run's summary page, before any failure below stops the step
+          $Suite = ([xml](Get-Content $Junit -Raw)).testsuite
+          $Cases = @($Suite.testcase)
+          $Failed = @($Cases | Where-Object { $_.status -eq 'fail' }).Count
+          $Passed = @($Cases | Where-Object { $_.status -eq 'run' }).Count
+          $NotRun = $Cases.Count - $Passed - $Failed
+          Write-Host "Tests: $Passed passed, $Failed failed, $NotRun not run"
+          $Rows = foreach ($Case in ($Cases | Sort-Object name)) {
+            $Result = switch ($Case.status) { 'run' { 'pass' } 'fail' { 'FAIL' } default { $Case.status } }
+            "| $Result | $($Case.name) | $([math]::Round([double]$Case.time, 3)) |"
+          }
+          $Summary = @("### SeamCarve tests", "", "$Passed passed, $Failed failed, $NotRun not run", "",
+            "| Result | Test | Seconds |", "|---|---|---|") + @($Rows)
+          if ($env:GITHUB_STEP_SUMMARY) { [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, (($Summary -join "`n") + "`n")) }
+          if ($Cases.Count -eq 0) { throw "No tests ran" }
+          if ($Failed -gt 0 -or $CtestExit -ne 0) { throw "$Failed test(s) failed, see the log above and the report artifact" }
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: ${{ github.workspace }}\TestReports
+          if-no-files-found: warn
+      # Google Benchmark suite (bench/) comparing the seam-carving implementations, using the build above. Only runs if
+      # the tests passed. Writes a results table to the run summary and uploads benchmark.json; algorithms that are not
+      # implemented yet are listed as skipped.
+      - name: Run Benchmarks
+        uses: ./.github/actions/run-benchmarks
+  build:
+    # Only package a build that passed the tests
+    needs: test
+    runs-on: self-hosted
+    name: Build Project
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      # Sets VCPKG_ROOT for the steps below (each job starts clean, so this is needed again here)
+      - name: Set up vcpkg
+        uses: ./.github/actions/setup-vcpkg
+      # The "windows-gui" preset (same as build.bat) names the Visual Studio 2026 generator, which the hosted runner
+      # may not have, so pick the generator of whichever Visual Studio is installed.
+      - name: Configure
+        run: |
+          $Vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $Version = & $Vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
+          $Major = $Version.Split('.')[0]
+          $Generator = switch ($Major) {
+            '18' { 'Visual Studio 18 2026' }
+            '17' { 'Visual Studio 17 2022' }
+            default { throw "Unsupported Visual Studio version '$Version'" }
+          }
+          Write-Host "Using generator '$Generator'"
+          # The benchmarks (built and run by the test job) are left out so benchmark.dll does not end up in the zip
+          cmake --preset windows-gui -G "$Generator" -DSEAMCARVE_BUILD_BENCHMARKS=OFF
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
+      # GUI-only app: build\seamcarve.exe with its DLLs copied next to it by vcpkg
+      - name: Build
+        run: cmake --build --preset windows-gui
+      # Zip the exe and its DLLs for easy deployment
+      - name: Compress Build Output
+        run: |
+          $Stage = "${{ github.workspace }}\Package\SeamCarve"
+          New-Item -ItemType Directory -Force $Stage | Out-Null
+          Copy-Item "${{ github.workspace }}\build\seamcarve.exe", "${{ github.workspace }}\build\*.dll" $Stage
+          Copy-Item "${{ github.workspace }}\README.md" $Stage
+          Compress-Archive -Path $Stage -DestinationPath "${{ github.workspace }}\SeamCarve-Windows.zip" -Force
+      - name: Upload Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeamCarve-Windows
+          path: ${{ github.workspace }}\SeamCarve-Windows.zip
+      - name: Create a Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: |
+            SeamCarve-Windows.zip

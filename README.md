@@ -71,6 +71,7 @@ After that, `make` only recompiles when a source file has changed.
 | `make gui [ARGS="-i image.png"]` | Open the interactive ImGui window (same executable; optionally with an image preloaded) |
 | `make usage` | Print the command-line usage of the CLI |
 | `make test` | Build, then run the tests |
+| `make bench [ARGS="..."]` | Build, then run the benchmarks (see [Benchmarks](#benchmarks)) |
 | `make rebuild` | Delete `build/` (keeps vcpkg) and build again |
 | `make clean` | Delete everything generated: `build/` and the repo-local `./vcpkg` |
 | `make help` | List the commands |
@@ -154,18 +155,19 @@ title bar onto another to dock it (or to tab it), and drag the dividers to resiz
 ## Project structure
 
 CMake builds two things: `seamcarve_core`, a static library holding all the algorithms, and the `seamcarve`
-executable (CLI + GUI) that links it.
+executable (CLI + GUI) that links it, plus the optional `seamcarve_bench` benchmark program.
 
 | CMake setting | Meaning |
 |---|---|
 | `SEAMCARVE_BUILD_GUI` (ON by default) | Compile the ImGui/GLFW window into `seamcarve`. Without it, `--gui` reports "this build has no GUI" |
+| `SEAMCARVE_BUILD_BENCHMARKS` (OFF by default, ON in the `vcpkg` preset) | Build `seamcarve_bench`, the Google Benchmark suite in `bench/`, as its own program (and Visual Studio project) |
 | `SEAMCARVE_GUI_ONLY` (OFF by default) | No command-line mode; `main()` always opens the window and, with MSVC, no console window. Used by `build.bat` |
 
 | CMake preset | Used by |
 |---|---|
 | `default` | CI on Ubuntu: system OpenCV (`libopencv-dev`), GUI off |
-| `vcpkg` | `make` on Linux/WSL and CI on Windows: vcpkg dependencies, CLI + GUI |
-| `windows-gui` | `build.bat`: Visual Studio 2026 project, GUI-only, DLLs |
+| `vcpkg` | `make` on Linux/WSL and CI on Windows: vcpkg dependencies, CLI + GUI + benchmarks |
+| `windows-gui` | `build.bat`: Visual Studio 2026 solution, GUI-only app + benchmarks, DLLs |
 
 ## Layout
 
@@ -174,10 +176,11 @@ include/seamcarve/   public headers (interfaces)
 src/                 energy, seam_dp, seam_greedy, seam_graphcut, seam_carver, types (algorithms);
                      cli, gui, gui_theme (GUI colours/fonts/style), main (program)
 tests/               CTest tests (they drive the CLI)
+bench/               Google Benchmark suite comparing the seam-carving implementations
 Makefile             build/run commands for Linux/WSL (wraps CMake + vcpkg)
 build.bat            build script for the Windows GUI app (Visual Studio 2026 project)
 CMakePresets.json    build presets (default, vcpkg, windows-gui)
-vcpkg.json           dependencies: OpenCV, ImGui, GLFW
+vcpkg.json           dependencies: OpenCV, ImGui, GLFW, Google Benchmark
 data/input|output    sample images / results
 docs/                AI usage log, report notes
 .github/workflows/   CI (Ubuntu + Windows)
@@ -216,6 +219,51 @@ cost the same, and is reported as skipped until `FindSeamDP` is implemented.
   `vcpkg` preset (CLI + GUI).
 
 Both run the CTest tests in `tests/`. CI does not run `make` or `build.bat`.
+
+`.github/workflows/release-cloud.yml` (GitHub-hosted runners) and `.github/workflows/release.yml` (self-hosted
+runner) run on tag pushes and manual runs, with two jobs: **test** (CTest, then the benchmarks below, through the
+`.github/actions/run-benchmarks` action) and **build** (zips the Windows GUI app and attaches it to a GitHub Release on tags).
+
+## Benchmarks
+
+`bench/bench_seams.cpp` uses [Google Benchmark](https://github.com/google/benchmark) to compare the implementations on
+the test images in `data/input` (`TowerTest.jpg`, `TsunamiTest.jpg`, `NoiseTest.png`). Each image is scaled down to several
+widths (from 32 px up to its own width, keeping the aspect ratio):
+
+| Benchmark | What it measures |
+|---|---|
+| `FindSeam/<dp\|greedy\|graphcut>/<image>/<width>` | One seam on the image's energy map, plus a fitted big-O (N = width, so DP should fit O(N^2) and greedy O(N)) and the seam's total energy (`seam_energy`). A seam that is not valid (wrong length, out of range, or jumping more than one column) is reported as an error |
+| `Carve/<dp\|greedy\|graphcut>/<image>/<width>` | A full `Carve()` removing 10% of the columns, at 64 px and 256 px wide (graph cut only at 64 px, to keep runs short) |
+| `ComputeEnergy/<image>/<width>` | The energy map shared by all algorithms |
+
+An algorithm that still throws "not implemented" is reported as skipped, so it starts producing numbers as soon as
+it is implemented. While `ComputeEnergy` is not implemented, `FindSeam` uses the image's grayscale intensity as the
+energy map (labelled "grayscale energy"). To benchmark a new variant, add one line to `kImpls`; to add an image, add
+it to `kImages` in `bench/bench_seams.cpp`.
+
+```bash
+make bench                                       # Linux / WSL (the vcpkg preset builds build/seamcarve_bench)
+make bench ARGS="--benchmark_filter=FindSeam/dp/TowerTest"  # only some benchmarks (regex)
+make bench ARGS="--benchmark_repetitions=5 --benchmark_out=bench.json --benchmark_out_format=json"
+```
+
+In CI, the **test** job runs them once the tests passed and uploads `benchmark.json` as the `benchmark-results` artifact.
+`.github/actions/run-benchmarks/summarize.ps1` writes tables to the run's summary page that put the algorithms side by side:
+
+- **At a glance**: per algorithm, how often it was fastest, its median time relative to the fastest, and how many of its
+  seams were optimal, with the median and worst extra seam energy compared with DP (which always finds the minimum)
+- **FindSeam time** and **seam energy**: one row per image and width, one column per algorithm
+- **Carve time**, the **fitted complexity** per algorithm and image, and (collapsed) `ComputeEnergy` and every raw result
+
+The same tables can be made locally from a JSON report:
+
+```powershell
+build\seamcarve_bench.exe --benchmark_out=bench.json --benchmark_out_format=json --benchmark_repetitions=3
+.github\actions\run-benchmarks\summarize.ps1 -Json bench.json -Repetitions 3 -SummaryPath bench.md
+```
+
+Times in the tables are wall-clock (CPU time on Windows only advances in ~15.6 ms steps). Timings on shared cloud runners are noisy: compare implementations within one run
+rather than across runs.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow and coding conventions, and
 [docs/ai-usage.md](docs/ai-usage.md) for the AI declaration log.
