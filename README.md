@@ -272,6 +272,10 @@ build\seamcarve_bench.exe --benchmark_out=bench.json --benchmark_out_format=json
 .github\actions\run-benchmarks\summarize.ps1 -Json bench.json -Repetitions 3 -SummaryPath bench.md
 ```
 
+On Windows you can also double-click `build\seamcarve_bench.exe`: it runs the benchmarks and then waits for Enter, so the
+results stay on screen instead of the window closing. Started from a shell, or in CI, it exits straight away (set the
+`NOPAUSE` environment variable to skip the wait in any case).
+
 Times in the tables are wall-clock (CPU time on Windows only advances in ~15.6 ms steps). Timings on shared cloud runners are noisy: compare implementations within one run
 rather than across runs.
 
