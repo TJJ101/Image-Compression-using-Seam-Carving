@@ -16,7 +16,7 @@ As part of a group assignment, we implemented Seam carving using 3 different met
   </tr>
   <tr>
     <td>Presentation Video</td>
-    <td>_TODO (YouTube Link)_ </td>
+    <td><a href="https://youtu.be/PYXidnjJpSY">Watch on YouTube</a></td>
   </tr>
 </table>
 
@@ -135,7 +135,7 @@ make run ARGS="--input <file> --algo <dp|greedy|graphcut> [--energy <gradient|so
 Example:
 
 ```bash
-make run ARGS="-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.png"
+make run ARGS="-i data/input/TowerTest.png -a dp -w 400 -o data/output/TowerTest_dp.png"
 ```
 
 **GUI (Linux / WSL: `make gui`; Windows: `build.bat run` or double-click `build\seamcarve.exe`):**
