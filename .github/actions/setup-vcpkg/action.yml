@@ -1,0 +1,37 @@
+name: Set up vcpkg
+description: >
+  Clones and bootstraps vcpkg, restores its binary cache (so OpenCV, ImGui and GLFW are only compiled when vcpkg.json
+  changes) and exports VCPKG_ROOT for the CMake presets in the later steps of the job.
+
+# Used by the Windows jobs in .github/workflows/ (once per job, right after checkout):
+#   - uses: ./.github/actions/setup-vcpkg
+#
+# Works on GitHub-hosted and self-hosted Windows runners. A self-hosted runner needs git, CMake and Visual Studio
+# (2022 or 2026) with the "Desktop development with C++" workload.
+
+runs:
+  using: composite
+  steps:
+    # Each step is a new shell, so variables only reach later steps if they are appended to the GITHUB_ENV file.
+    # AppendAllText writes UTF-8 without a BOM, which Out-File / >> in Windows PowerShell 5.1 would not.
+    - name: Export vcpkg paths
+      shell: powershell
+      run: |
+        [System.IO.File]::AppendAllText($env:GITHUB_ENV, "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg-root`n")
+        [System.IO.File]::AppendAllText($env:GITHUB_ENV, "VCPKG_DEFAULT_BINARY_CACHE=$env:GITHUB_WORKSPACE\vcpkg-cache`n")
+    - name: Cache vcpkg binaries
+      uses: actions/cache@v4
+      with:
+        path: vcpkg-cache
+        key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+    # A self-hosted runner can keep the workspace between runs, so reuse a vcpkg that is already there
+    - name: Bootstrap vcpkg
+      shell: powershell
+      run: |
+        New-Item -ItemType Directory -Force "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+        if (Test-Path "$env:VCPKG_ROOT\vcpkg.exe") { Write-Host "Using existing vcpkg at $env:VCPKG_ROOT"; exit 0 }
+        if (Test-Path "$env:VCPKG_ROOT") { Remove-Item -Recurse -Force "$env:VCPKG_ROOT" }
+        git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+        if ($LASTEXITCODE -ne 0) { throw "git clone of vcpkg failed" }
+        & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+        if ($LASTEXITCODE -ne 0) { throw "bootstrap-vcpkg.bat failed" }

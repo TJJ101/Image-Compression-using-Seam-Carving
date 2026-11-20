@@ -1,0 +1,55 @@
+name: Run benchmarks
+description: >
+  Runs the Google Benchmark suite (bench/, seamcarve_bench) that compares the seam-carving implementations,
+  writes comparison tables to the run's summary page (summarize.ps1) and uploads the JSON report as an artifact.
+  Benchmarks of algorithms that are not implemented yet are listed as skipped; any other error fails the step.
+
+# Used by the test jobs in .github/workflows/, after the "vcpkg" preset was built (it builds seamcarve_bench too):
+#   - run: cmake --build --preset vcpkg
+#   - uses: ./.github/actions/run-benchmarks
+#
+# Works on GitHub-hosted and self-hosted Windows runners.
+
+inputs:
+  repetitions:
+    description: How many times each benchmark is repeated; the table shows the mean
+    default: '3'
+  report-path:
+    description: Folder the benchmark JSON report (benchmark.json) is written to
+    default: '${{ github.workspace }}\BenchReports'
+  artifact-name:
+    description: Name of the uploaded artifact holding the report
+    default: benchmark-results
+
+runs:
+  using: composite
+  steps:
+    - name: Run Benchmarks
+      shell: powershell
+      env:
+        BENCH_PATH: ${{ inputs.report-path }}
+        BENCH_REPETITIONS: ${{ inputs.repetitions }}
+      run: |
+        if (Test-Path "$env:BENCH_PATH") { Remove-Item -Recurse -Force "$env:BENCH_PATH" }
+        New-Item -ItemType Directory -Force "$env:BENCH_PATH" | Out-Null
+        $Json = Join-Path $env:BENCH_PATH 'benchmark.json'
+        # The Visual Studio generator puts the exe in build\Release, a single-config generator in build
+        $Exe = @("build\Release\seamcarve_bench.exe", "build\seamcarve_bench.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $Exe) { throw "seamcarve_bench.exe not found: build the vcpkg preset (cmake --build --preset vcpkg) first" }
+        # The JSON file keeps every repetition (skipped benchmarks have no aggregates); the log shows only mean/median/stddev
+        & $Exe "--benchmark_out=$Json" --benchmark_out_format=json `
+          "--benchmark_repetitions=$env:BENCH_REPETITIONS" --benchmark_display_aggregates_only=true
+        $BenchExit = $LASTEXITCODE
+        if (-not (Test-Path $Json)) { throw "No benchmark report was written to $Json" }
+
+        # Comparison tables (speed relative to the fastest, seam energy relative to DP) for the run summary.
+        # Throws if a benchmark failed with an error. Can also be run locally on a benchmark.json, see the script.
+        & "$env:GITHUB_ACTION_PATH\summarize.ps1" -Json $Json -Repetitions ([int]$env:BENCH_REPETITIONS)
+        if ($BenchExit -ne 0) { throw "seamcarve_bench exited with code $BenchExit" }
+    - name: Upload Benchmark Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.report-path }}
+        if-no-files-found: warn

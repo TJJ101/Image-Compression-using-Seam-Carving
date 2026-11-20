@@ -17,7 +17,8 @@ EXE          := build/seamcarve
 # The generated Makefile only exists after a configure that succeeded (CMakeCache.txt can be left
 # behind by a failed one).
 CACHE        := $(BUILD_DIR)/Makefile
-SOURCES      := $(wildcard src/*.cpp include/seamcarve/*.hpp) CMakeLists.txt
+BENCH        := build/seamcarve_bench
+SOURCES      := $(wildcard src/*.cpp include/seamcarve/*.hpp bench/*.cpp) CMakeLists.txt bench/CMakeLists.txt
 
 # vcpkg location, relative to the repo root. Set VCPKG_DIR (or the VCPKG_ROOT environment
 # variable) to use your own vcpkg instead of the repo-local ./vcpkg.
@@ -28,7 +29,7 @@ endif
 export VCPKG_ROOT := $(abspath $(VCPKG_DIR))
 
 .DEFAULT_GOAL := build
-.PHONY: help build test run usage gui clean rebuild
+.PHONY: help build test bench run usage gui clean rebuild
 
 help: ## Show this help
 	@echo "Usage: make [target]"
@@ -37,6 +38,7 @@ help: ## Show this help
 	@echo ""
 	@echo "CLI example: make run ARGS=\"-i data/input/castle.png -a dp -w 400 -o data/output/castle_dp.png\""
 	@echo "GUI example: make gui ARGS=\"-i data/input/castle.png\""
+	@echo "Benchmarks:  make bench ARGS=\"--benchmark_filter=FindSeam\""
 
 # Fetch and bootstrap vcpkg (only if it is not there yet).
 $(VCPKG_DIR)/vcpkg:
@@ -56,6 +58,9 @@ build: $(EXE) ## Install deps via vcpkg and build the executable (default)
 
 test: $(EXE) ## Build, then run the CTest tests
 	ctest --preset $(PRESET)
+
+bench: $(EXE) ## Build, then run the benchmarks: make bench [ARGS="--benchmark_filter=dp"]
+	$(BENCH) $(ARGS)
 
 run: $(EXE) ## Run the CLI: make run ARGS="-i in.png -a dp -w 400" (no ARGS opens the GUI)
 	$(EXE) $(ARGS)

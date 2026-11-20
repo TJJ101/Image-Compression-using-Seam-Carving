@@ -24,22 +24,10 @@ jobs:
   # program and runs the CLI tests. (build.bat's GUI-only Visual Studio 2026 setup is not used here.)
   windows:
     runs-on: windows-latest
-    env:
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg-root
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
     steps:
       - uses: actions/checkout@v4
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v4
-        with:
-          path: vcpkg-cache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-      - name: Prepare vcpkg
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
-          & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+      - name: Set up vcpkg
+        uses: ./.github/actions/setup-vcpkg
       - name: Configure
         run: cmake --preset vcpkg
       - name: Build
