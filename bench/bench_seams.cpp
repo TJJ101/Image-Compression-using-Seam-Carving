@@ -19,6 +19,10 @@
 // the energy map, and say so in their label.
 //
 // Run: build/seamcarve_bench [--benchmark_filter=dp] [--benchmark_repetitions=3] ...
+//
+// On Windows, started by double-clicking, the program waits for Enter before it exits so the results stay on screen
+// (the console window would otherwise close with them). Started from a shell, or in CI, it exits straight away;
+// set the NOPAUSE environment variable to skip the wait in any case.
 
 #include <benchmark/benchmark.h>
 
@@ -26,9 +30,19 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // windows.h would otherwise define min / max macros that break std::min / std::max
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <io.h>
+#include <windows.h>
+#endif
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -264,9 +278,29 @@ namespace {
             }
         }
     }
+
+    // Keeps the console window open when the program was started by double-clicking it (Windows only): Windows then
+    // makes a console just for this program and closes it, with the results, as soon as the program ends.
+    // That case is recognised by this being the only process attached to its console (run from a shell, the shell is a
+    // second one; run as a service, there is no console) and by input coming from the console (so someone can press Enter).
+    // Setting the NOPAUSE environment variable skips the wait.
+    void WaitForEnterIfOwnConsole() {
+#ifdef _WIN32
+        if (GetEnvironmentVariableA("NOPAUSE", nullptr, 0) != 0) {
+            return;
+        }
+        DWORD processes[2];
+        if (GetConsoleProcessList(processes, 2) != 1 || !_isatty(_fileno(stdin))) {
+            return;
+        }
+        std::cout << "\nPress Enter to close this window..." << std::flush;
+        std::cin.get();
+#endif
+    }
 }  // namespace
 
-int main(int argc, char** argv) {
+// The benchmarks themselves; main() runs them and then waits if needed, so every way of finishing waits.
+static int RunBenchmarks(int argc, char** argv) {
     benchmark::Initialize(&argc, argv);
     if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
         return 1;
@@ -290,4 +324,10 @@ int main(int argc, char** argv) {
     benchmark::RunSpecifiedBenchmarks();
     benchmark::Shutdown();
     return 0;
+}
+
+int main(int argc, char** argv) {
+    const int result = RunBenchmarks(argc, argv);
+    WaitForEnterIfOwnConsole();
+    return result;
 }

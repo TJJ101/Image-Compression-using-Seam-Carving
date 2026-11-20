@@ -146,11 +146,21 @@ conquer; for divide and conquer also its type, recursion or iteration, and block
 sliders ("Keep aspect ratio" moves them together, Reset goes back to the original size) and press Carve. Save
 result writes the carved image next to the original as `<name>_carved_<width>x<height>.<ext>`. The original and
 the result are shown in their own windows at the same scale ("Fit images to window" scales them to fit, untick it
-for 100% with scrollbars). Messages appear in the status bar at the bottom (hover a message for the full path). The
-window uses the system UI font (Segoe UI on Windows, Ubuntu / DejaVu on Linux) and scales with the display scale
+for 100% with scrollbars). Messages appear in the status bar at the bottom (hover a message for the full path).
+The window uses the system UI font (Segoe UI on Windows, Ubuntu / DejaVu on Linux) and scales with the display scale
 setting. The windows are dockable: drag one by its
 title bar onto another to dock it (or to tab it), and drag the dividers to resize. The layout is saved to
 `imgui.ini` in the folder you launched from (git-ignored).
+
+**Step-by-step view (bonus).** While carving, the Result window shows the image shrinking one seam at a time, with
+the next seam to be removed in red ("Show each seam while carving" in the Preview section; the "ms between seams"
+slider slows it down so each seam can be followed, and can be changed during the carve). When the carve is finished
+the Steps slider (or its arrow buttons) scrubs back and forth through it: step *k* is the image after *k* seams, with
+seam *k + 1* in red, and the last step is the final result. "Show removed seams on the original" draws every
+removed seam on the Original window, coloured by order from blue (first) to red (last). The same hooks are available
+to code: `CarveOptions::onSeamFound` (called for every seam just before it is removed) and `CarveOptions::seamLog`
+(every removed seam, in order); `BuildRemovalMap`, `RenderSeamOverlay` and `RenderCarveStep` in
+`include/seamcarve/seam_carver.hpp` turn that log into the pictures. They are tested by `tests/seam_visual_test.cpp`.
 
 ## Project structure
 
@@ -261,6 +271,10 @@ The same tables can be made locally from a JSON report:
 build\seamcarve_bench.exe --benchmark_out=bench.json --benchmark_out_format=json --benchmark_repetitions=3
 .github\actions\run-benchmarks\summarize.ps1 -Json bench.json -Repetitions 3 -SummaryPath bench.md
 ```
+
+On Windows you can also double-click `build\seamcarve_bench.exe`: it runs the benchmarks and then waits for Enter, so the
+results stay on screen instead of the window closing. Started from a shell, or in CI, it exits straight away (set the
+`NOPAUSE` environment variable to skip the wait in any case).
 
 Times in the tables are wall-clock (CPU time on Windows only advances in ~15.6 ms steps). Timings on shared cloud runners are noisy: compare implementations within one run
 rather than across runs.
