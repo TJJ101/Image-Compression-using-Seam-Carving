@@ -1,6 +1,9 @@
-// Tests for the incremental energy update (ComputeEnergyAt, UpdateEnergyAfterSeamRemoval) and for Carve(),
-// which uses it. The update must give exactly the map a full recompute gives, after every single seam,
-// and Carve() must give exactly the image the plain "recompute everything after every seam" loop gives.
+// Tests for the incremental energy update (UpdateEnergyAfterSeamRemoval) and for Carve(), which uses it.
+// The update must give exactly the map a full recompute gives, after every single seam, and Carve() must give
+// exactly the image the plain "recompute everything after every seam" loop gives.
+// The update works on chunks of 64 rows (UPDATE_CHUNK_ROWS in energy.cpp), each with its own crop, so the
+// images include heights just below, at and above one and two chunks (63, 64, 65, 130, 150 rows): a mistake
+// at a chunk boundary (the seam pixel in the row beyond a chunk, the crop's margin) only shows up there.
 // Images are random noise (the worst case for the update: every pixel differs from its neighbours).
 #include <algorithm>
 #include <iostream>
@@ -100,10 +103,11 @@ int main() {
         { "divide and conquer, iteration, base 32", EnergyMethod::DIVIDE_AND_CONQUER, DivideAndConquer::ITERATION, 32 },
     };
 
-    // 1. After every seam the updated map equals a full recompute (sizes include 1-3 pixel dimensions: the borders).
+    // 1. After every seam the updated map equals a full recompute (sizes include 1-3 pixel dimensions: the borders,
+    //    and 63 / 64 / 65 / 130 rows: one chunk, exactly one chunk, one row more, and more than two chunks).
     for (const Setup& setup : setups) {
         int checked{}, wrong{};
-        for (int rows : { 1, 2, 3, 5, 17, 40 }) {
+        for (int rows : { 1, 2, 3, 5, 17, 40, 63, 64, 65, 130 }) {
             for (int cols : { 2, 3, 4, 9, 30 }) {
                 cv::Mat image(RandomImage(rows, cols, rows * 100 + cols));
                 cv::Mat energy(seamcarve::ComputeEnergy(image, setup.method, setup.type, setup.baseSize));
@@ -125,11 +129,12 @@ int main() {
         std::cout << (wrong == 0 ? "PASS  " : "FAIL  ") << "update is exact after every seam: " << setup.name << " (" << checked << " seams)\n";
     }
 
-    // 2. Carve() gives exactly the image the slow loop gives, in both directions.
+    // 2. Carve() gives exactly the image the slow loop gives, in both directions. The image is 150 rows tall, so
+    //    three chunks while the height is carved down, and the targets cover width only, height only and both.
     for (const Setup& setup : setups) {
         int wrong{}, total{};
-        for (const std::pair<int, int>& target : std::vector<std::pair<int, int>>{ { 60, 50 }, { 45, 33 }, { 20, 50 }, { 60, 5 }, { 2, 2 }, { 60, 50 } }) {
-            const cv::Mat image(RandomImage(50, 60, target.first * 7 + target.second));
+        for (const std::pair<int, int>& target : std::vector<std::pair<int, int>>{ { 60, 140 }, { 45, 100 }, { 20, 150 }, { 60, 5 }, { 2, 2 }, { 60, 150 } }) {
+            const cv::Mat image(RandomImage(150, 60, target.first * 7 + target.second));
             seamcarve::CarveOptions options;
             options.energyMethod = setup.method;
             options.divideAndConquerType = setup.type;

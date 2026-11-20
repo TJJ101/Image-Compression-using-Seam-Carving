@@ -70,10 +70,13 @@ namespace seamcarve {
     /**
     * @brief Brings an energy map up to date after a vertical seam was removed from the image and from the map.
     * Removing a seam only changes the energy of the pixels within one column of it, so only that band is
-    * recomputed instead of the whole map: the band is cropped out of the image (with one extra column on each
-    * side for the filter to read) and the chosen method's own full-map function runs on the crop
-    * (Sobel with OpenCV's Sobel, Gradient with its finite differences, Divide and conquer with its recursion
-    * or iteration). The result equals a full ComputeEnergy of the image.
+    * recomputed instead of the whole map. A seam wanders sideways as it goes down, so one box around all of it
+    * would be wide and mostly wasted; instead the rows are cut into chunks (UPDATE_CHUNK_ROWS in energy.cpp) and
+    * each chunk only covers the part of the seam that lies in it. For each chunk the band is cropped out of the
+    * image (with one extra pixel on every side for the filter to read) and the chosen method's own full-map
+    * function runs on the crop (Sobel with OpenCV's Sobel, Gradient with its finite differences, Divide and
+    * conquer with its recursion or iteration); only the changed pixels are copied back.
+    * The result equals a full ComputeEnergy of the image.
     * @param[in,out] energy	- Energy map (CV_64F) with the seam already removed; fixed in place.
     * @param[in] image	    - 8-bit BGR image (CV_8UC3) with the seam already removed, same size as energy.
     * @param[in] seam	    - The removed seam, one column per row of the image before the removal.
